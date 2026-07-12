@@ -1,11 +1,20 @@
-.venv/
+# Python
 __pycache__/
 *.pyc
+.venv/
 *.egg-info/
 build/
 dist/
+.pytest_cache/
+
+# 모델 아티팩트 — tools/export_pretrained.py로 재생성 가능
 models/packages/
 *.onnx
 *.pt
+
+# 로컬 실행 산출물 (detect/eval 출력, 데모 사진)
 out/
 sample.jpg
+
+# 에이전트 작업 스크래치 (SDD 원장·브리프·리뷰 패키지)
+.superpowers/
