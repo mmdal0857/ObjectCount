@@ -44,6 +44,25 @@ def load_package(path: str | Path) -> ModelPackage:
         raise ModelPackageError(
             f"지원하지 않는 schema_version: {manifest['schema_version']}")
 
+    # Validate input_size: must be list/tuple of exactly 2 positive ints
+    input_size = manifest["input_size"]
+    if not isinstance(input_size, (list, tuple)) or len(input_size) != 2:
+        raise ModelPackageError(
+            f"input_size는 [w, h] 두 정수여야 합니다: {input_size!r}")
+    for v in input_size:
+        if not isinstance(v, int) or isinstance(v, bool) or v <= 0:
+            raise ModelPackageError(
+                f"input_size는 [w, h] 두 정수여야 합니다: {input_size!r}")
+
+    # Validate classes: must be non-empty list of strings
+    classes = manifest["classes"]
+    if not isinstance(classes, list) or len(classes) == 0:
+        raise ModelPackageError(
+            f"classes는 비어있지 않은 문자열 목록이어야 합니다: {classes!r}")
+    if not all(isinstance(c, str) for c in classes):
+        raise ModelPackageError(
+            f"classes는 비어있지 않은 문자열 목록이어야 합니다: {classes!r}")
+
     package = ModelPackage(
         root=root,
         product_id=manifest["product_id"],

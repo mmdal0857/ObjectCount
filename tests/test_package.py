@@ -59,3 +59,21 @@ def test_unsupported_schema_version_raises(tmp_path):
     manifest = dict(VALID, schema_version=99)
     with pytest.raises(ModelPackageError, match="schema_version"):
         load_package(write_package(tmp_path, manifest))
+
+
+def test_invalid_input_size_shape_raises(tmp_path):
+    manifest = dict(VALID, input_size=[64])
+    with pytest.raises(ModelPackageError, match="input_size"):
+        load_package(write_package(tmp_path, manifest))
+
+
+def test_invalid_input_size_type_raises(tmp_path):
+    manifest = dict(VALID, input_size=[64, "64"])
+    with pytest.raises(ModelPackageError, match="input_size"):
+        load_package(write_package(tmp_path, manifest))
+
+
+def test_empty_classes_raises(tmp_path):
+    manifest = dict(VALID, classes=[])
+    with pytest.raises(ModelPackageError, match="classes"):
+        load_package(write_package(tmp_path, manifest))
