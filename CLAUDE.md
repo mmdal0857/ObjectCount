@@ -1,6 +1,7 @@
 # ObjectCount
 
-다중 핸드폰 카메라로 컨베이어 위 오브젝트를 카운팅하는 시스템. **Phase 1a(감지 코어) 완료** — 추적·카운팅·캡처 앱·대시보드는 Phase 1b.
+다중 핸드폰 카메라로 컨베이어 위 오브젝트를 카운팅하는 시스템. **Phase 1a(감지 코어) 완료.**
+**다음 작업 = Phase 1b-1 추적·카운팅 코어** (트랙 ID 넘버링 + 가상선 카운팅, 영상 파일로 검증) → 1b-2 캡처 앱·실시간 → Phase 3 다중 카메라 융합.
 
 ## 핵심 문서
 - 스펙: `docs/superpowers/specs/2026-07-12-phone-camera-object-counting-design.md`
