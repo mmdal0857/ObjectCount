@@ -32,3 +32,20 @@ def test_main_prints_summary_and_exits_zero(tiny_package, tmp_path, capsys):
                       "--dataset", str(dataset)])
     assert exit_code == 0
     assert "1/1" in capsys.readouterr().out
+
+
+def test_missing_expected_counts_reports_error_exits_zero(tiny_package, tmp_path, capsys):
+    dataset = tmp_path / "dataset"
+    dataset.mkdir()
+    cv2.imwrite(str(dataset / "a.png"), np.zeros((64, 64, 3), dtype=np.uint8))
+    exit_code = main(["--package", str(tiny_package), "--dataset", str(dataset)])
+    assert exit_code == 0
+    assert "오류" in capsys.readouterr().err
+
+
+def test_unlisted_images_are_skipped(tiny_package, tmp_path):
+    dataset = make_dataset(tmp_path, {"a.png": 1})
+    cv2.imwrite(str(dataset / "z.png"), np.zeros((64, 64, 3), dtype=np.uint8))
+    report = evaluate_dataset(tiny_package, dataset)
+    assert list(report["per_image"].keys()) == ["a.png"]
+    assert report["total"] == 1

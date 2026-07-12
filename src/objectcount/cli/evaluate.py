@@ -7,11 +7,12 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 from ..detection.detector import OnnxDetector
 from ..frames.sources import iter_frames
-from ..models.package import load_package
+from ..models.package import load_package, ModelPackageError
 
 
 def evaluate_dataset(package_path: Path, dataset_dir: Path,
@@ -44,8 +45,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--conf", type=float, default=0.25)
     args = parser.parse_args(argv)
 
-    report = evaluate_dataset(Path(args.package), Path(args.dataset),
-                              conf=args.conf)
+    try:
+        report = evaluate_dataset(Path(args.package), Path(args.dataset),
+                                  conf=args.conf)
+    except (ModelPackageError, ValueError, OSError) as error:
+        # 플랜 제약: 하네스는 보고 도구 — 오류도 보고하고 exit 0 유지
+        print(f"오류: {error}", file=sys.stderr)
+        return 0
+
     for name, row in sorted(report["per_image"].items()):
         delta = row["detected"] - row["expected"]
         print(f"{name}: 기대 {row['expected']} / 감지 {row['detected']}"
