@@ -15,6 +15,10 @@ def decode_yolo(
     active_class_ids: list[int] | None = None,
 ) -> list[Detection]:
     pred = raw[0]                      # (4+nc, N)
+    num_classes = pred.shape[0] - 4
+    if num_classes != len(class_names):
+        raise ValueError(
+            f"모델 출력 클래스 수({num_classes})가 manifest classes 수({len(class_names)})와 다릅니다")
     boxes = pred[:4, :]                # cx, cy, w, h — letterbox 픽셀
     scores = pred[4:, :]               # (nc, N)
     class_ids = scores.argmax(axis=0)

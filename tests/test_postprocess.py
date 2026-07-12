@@ -76,3 +76,9 @@ def test_nms_keeps_disjoint_boxes():
     kept = nms([_det(0.0, 0.0, 0.2, 0.2, 0.9),
                 _det(0.5, 0.5, 0.9, 0.9, 0.8)])
     assert len(kept) == 2
+
+
+def test_decode_rejects_class_count_mismatch():
+    raw = make_raw([[32, 32, 16, 16, 0.9, 0.1]])  # nc=2
+    with pytest.raises(ValueError, match="클래스 수"):
+        decode_yolo(raw, META, ["can"])  # manifest엔 1개
