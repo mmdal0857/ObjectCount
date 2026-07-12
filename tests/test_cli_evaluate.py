@@ -5,6 +5,15 @@ import numpy as np
 
 from objectcount.cli.evaluate import evaluate_dataset, main
 
+MANIFEST = {
+    "schema_version": 1,
+    "product_id": "tiny",
+    "product_name": "테스트 상수 모델",
+    "model_version": "test-1",
+    "input_size": [64, 64],
+    "classes": ["can", "box"],
+}
+
 
 def make_dataset(tmp_path, expected):
     dataset = tmp_path / "dataset"
@@ -49,3 +58,14 @@ def test_unlisted_images_are_skipped(tiny_package, tmp_path):
     report = evaluate_dataset(tiny_package, dataset)
     assert list(report["per_image"].keys()) == ["a.png"]
     assert report["total"] == 1
+
+
+def test_corrupt_model_reports_error_exits_zero(tmp_path, capsys):
+    package = tmp_path / "pkg"
+    package.mkdir()
+    (package / "manifest.json").write_text(json.dumps(MANIFEST), encoding="utf-8")
+    (package / "model.onnx").write_bytes(b"\x00")
+    dataset = make_dataset(tmp_path, {"a.png": 1})
+    exit_code = main(["--package", str(package), "--dataset", str(dataset)])
+    assert exit_code == 0
+    assert "오류" in capsys.readouterr().err
