@@ -38,3 +38,23 @@ def test_detect_cli_roi_filters_all(tiny_package, tmp_path):
     record = json.loads(
         (out_dir / "detections.jsonl").read_text(encoding="utf-8"))
     assert record["detections"] == []
+
+
+def test_detect_cli_bad_package_returns_error(tmp_path, capsys):
+    image_path = tmp_path / "frame.png"
+    cv2.imwrite(str(image_path), np.zeros((64, 64, 3), dtype=np.uint8))
+    exit_code = main(["--package", str(tmp_path / "no-such-package"),
+                      "--input", str(image_path),
+                      "--out", str(tmp_path / "out")])
+    assert exit_code == 1
+    assert "manifest.json" in capsys.readouterr().err
+
+
+def test_detect_cli_bad_input_returns_error(tiny_package, tmp_path, capsys):
+    bad_input = tmp_path / "data.txt"
+    bad_input.write_text("x")
+    exit_code = main(["--package", str(tiny_package),
+                      "--input", str(bad_input),
+                      "--out", str(tmp_path / "out")])
+    assert exit_code == 1
+    assert "지원하지 않는" in capsys.readouterr().err
