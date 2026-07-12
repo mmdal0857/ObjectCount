@@ -8,3 +8,4 @@ models/packages/
 *.onnx
 *.pt
 out/
+sample.jpg
