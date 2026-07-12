@@ -1,0 +1,28 @@
+[project]
+name = "objectcount"
+version = "0.1.0"
+description = "다중 카메라 컨베이어 오브젝트 카운팅 — 감지 코어"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=1.26",
+    "opencv-python>=4.9",
+    "onnxruntime>=1.17",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "onnx>=1.16"]
+tools = ["ultralytics>=8.2"]
+
+[project.scripts]
+objectcount-detect = "objectcount.cli.detect:main"
+objectcount-eval = "objectcount.cli.evaluate:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
