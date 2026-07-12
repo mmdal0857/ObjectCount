@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import onnxruntime as ort
 
-from ..models.package import ModelPackage
+from ..models.package import ModelPackage, ModelPackageError
 from .postprocess import decode_yolo, nms
 from .preprocess import letterbox
 from .types import Detection
@@ -34,10 +34,14 @@ class OnnxDetector:
         self.package = package
         self.conf_threshold = conf_threshold
         self.iou_threshold = iou_threshold
-        self._session = ort.InferenceSession(
-            str(package.model_path),
-            providers=providers if providers is not None else select_providers(),
-        )
+        try:
+            self._session = ort.InferenceSession(
+                str(package.model_path),
+                providers=providers if providers is not None else select_providers(),
+            )
+        except Exception as error:
+            raise ModelPackageError(
+                f"model.onnx 로드 실패 ({package.model_path}): {error}") from error
         self._input_name = self._session.get_inputs()[0].name
 
     def detect(self, image_bgr: np.ndarray) -> list[Detection]:
