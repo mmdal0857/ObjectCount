@@ -88,7 +88,7 @@ def train_candidate(
     try:
         exporter = factory(best)
         exported = Path(exporter.export(
-            format="onnx", imgsz=int(settings["imgsz"]), opset=17))
+            format="onnx", imgsz=int(settings["imgsz"]), opset=18))
         if not exported.is_file():
             raise FileNotFoundError(f"ONNX export was not produced: {exported}")
         shutil.copy2(exported, staging / "model.onnx")

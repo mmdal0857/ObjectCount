@@ -8,6 +8,10 @@ TORCH_WHEEL="$ROCM_WHEELS/torch-2.10.0+rocm7.2.0.lw.gitb6ee5fde-cp310-cp310-linu
 TORCHVISION_WHEEL="$ROCM_WHEELS/torchvision-0.25.0+rocm7.2.0.git82df5f59-cp310-cp310-linux_x86_64.whl"
 TRITON_WHEEL="$ROCM_WHEELS/triton-3.6.0+rocm7.2.0.gitba5c1517-cp310-cp310-linux_x86_64.whl"
 ULTRALYTICS_VERSION="${ULTRALYTICS_VERSION:-8.3.169}"
+ONNX_VERSION="${ONNX_VERSION:-1.17.0}"
+ONNXSCRIPT_VERSION="${ONNXSCRIPT_VERSION:-0.7.1}"
+ONNXSLIM_VERSION="${ONNXSLIM_VERSION:-0.1.94}"
+ONNXRUNTIME_GPU_VERSION="${ONNXRUNTIME_GPU_VERSION:-1.23.2}"
 RUN_ULTRALYTICS_SMOKE=1
 
 if [[ "${1:-}" == "--skip-ultralytics-smoke" ]]; then
@@ -93,12 +97,28 @@ BEFORE_TORCH="$(torch_fingerprint)"
 
 say "Install Ultralytics without replacing ROCm packages"
 "$PIP" install "ultralytics==$ULTRALYTICS_VERSION"
+"$PIP" install \
+    "onnx==$ONNX_VERSION" \
+    "onnxscript==$ONNXSCRIPT_VERSION" \
+    "onnxslim==$ONNXSLIM_VERSION" \
+    "onnxruntime-gpu==$ONNXRUNTIME_GPU_VERSION"
 AFTER_TORCH="$(torch_fingerprint)"
 if [[ "$BEFORE_TORCH" != "$AFTER_TORCH" ]]; then
     printf 'PyTorch changed during Ultralytics installation.\nBefore:\n%s\nAfter:\n%s\n' \
         "$BEFORE_TORCH" "$AFTER_TORCH" >&2
     exit 1
 fi
+"$PYTHON" - <<'PY'
+import onnx
+import onnxruntime
+import onnxscript
+import onnxslim
+
+print(f"onnx={onnx.__version__}")
+print(f"onnxscript={onnxscript.__version__}")
+print(f"onnxruntime={onnxruntime.__version__}")
+print(f"onnxslim={onnxslim.__version__}")
+PY
 "$PIP" freeze > "$VENV/pip-freeze.txt"
 
 say "20-step forward/backward gate"

@@ -187,6 +187,7 @@ class FakeTrainer:
 
     def export(self, **kwargs):
         assert self.model.name == "best.pt"
+        self.export_kwargs = kwargs
         exported = self.model.with_suffix(".onnx")
         exported.write_bytes(b"onnx")
         return str(exported)
@@ -217,6 +218,7 @@ def test_train_candidate_exports_best_and_writes_candidate_manifest(tmp_path):
     assert package == output
     assert [instance.model.name for instance in FakeTrainer.instances] == [
         "yolo11n.pt", "best.pt"]
+    assert FakeTrainer.instances[1].export_kwargs["opset"] == 18
     manifest = json.loads((output / "manifest.json").read_text("utf-8"))
     assert manifest["classes"] == ["toilet_paper_roll"]
     assert manifest["candidate_status"] == "candidate"
