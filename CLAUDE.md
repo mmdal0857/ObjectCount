@@ -1,15 +1,15 @@
 # ObjectCount
 
 다중 핸드폰 카메라로 컨베이어 위 오브젝트를 카운팅하는 시스템. **Phase 1a(감지 코어) 완료.**
-**다음 작업 = Phase 1b-1 추적·카운팅 코어** (트랙 ID 넘버링 + 가상선 카운팅, 영상 파일로 검증) → 1b-2 캡처 앱·실시간 → Phase 3 다중 카메라 융합.
+**다음 작업 = Phase 1b-1 추적·카운팅 코어** (트랙 ID 넘버링 + 카운트라인 카운팅, 영상 파일로 검증) → 1b-2 캡처 앱·실시간 → Phase 3 다중 카메라 융합.
 
 ## 핵심 문서
 - 스펙: `docs/superpowers/specs/2026-07-12-phone-camera-object-counting-design.md`
-- 용어집: `CONTEXT.md` — 라인/품종/카운트 세션/의심 이벤트/보정 등. 코드·대화에서 이 용어를 쓴다
+- 용어집: `CONTEXT.md` — 라인/프로덕트/트랙/카운트 세션/의심 이벤트/보정 등. 코드·대화에서 이 용어를 쓴다
 - ADR: `docs/adr/` — 0001 무손실 store-and-forward, 0002 유선 우선 연결
 
 ## 명령어
-- 테스트: `.venv\Scripts\python -m pytest -q` (95개)
+- 테스트: `.venv\Scripts\python -m pytest -q` (97개)
 - 감지: `.venv\Scripts\objectcount-detect --package models/packages/coco-demo --input <이미지|폴더|영상> --out out/<이름>`
 - 캡처: `.venv\Scripts\objectcount-capture --package models/packages/coco-demo --out out/captures` — 폰 Chrome에서 `http://localhost:8377/phone`, PC 뷰어 `http://localhost:8377/`. 캡처 세션 폴더는 `--input`으로 그대로 리플레이 가능
 - 평가: `.venv\Scripts\objectcount-eval --package <pkg> --dataset <dir>` — **항상 exit 0** (하네스는 보고 도구; 실행 실패는 stderr `실행불가:` 접두어로 보고 결과와 구분)
