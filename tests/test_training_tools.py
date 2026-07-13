@@ -12,7 +12,7 @@ from tools.training.prepare_dataset import prepare_dataset
 from objectcount.detection.types import Detection
 from tools.training.create_contact_sheet import create_contact_sheet
 from tools.training.evaluate_candidate import evaluate_thresholds
-from tools.training.train_candidate import train_candidate
+from tools.training.train_candidate import _load_config, train_candidate
 
 
 def jpeg_bytes(value: int) -> bytes:
@@ -224,6 +224,34 @@ def test_train_candidate_exports_best_and_writes_candidate_manifest(tmp_path):
     assert manifest["candidate_status"] == "candidate"
     assert manifest["original_incident"] == "unverified"
     assert (output / "model.onnx").read_bytes() == b"onnx"
+
+
+def test_candidate_v2_config_packages_version_without_touching_v1(tmp_path):
+    config = _load_config(
+        Path("training/products/toilet-paper-roll/train-v2.yaml")
+    )
+    assert config["name"] == "candidate-v2"
+    assert config["imgsz"] == 640
+    assert config["seed"] == 713
+    config["project"] = str(tmp_path / "runs")
+    config["epochs"] = 1
+    local_config = tmp_path / "train-v2.json"
+    local_config.write_text(json.dumps(config), encoding="utf-8")
+    candidate_v1 = tmp_path / "candidate-v1"
+    candidate_v1.mkdir()
+    (candidate_v1 / "keep.txt").write_text("v1", encoding="utf-8")
+
+    output = tmp_path / "candidate-v2"
+    train_candidate(
+        local_config,
+        tmp_path / "data.yaml",
+        output,
+        trainer_factory=FakeTrainer,
+    )
+
+    manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["model_version"] == "candidate-v2"
+    assert (candidate_v1 / "keep.txt").read_text(encoding="utf-8") == "v1"
 
 
 def test_train_candidate_keeps_existing_package_when_export_fails(tmp_path):
