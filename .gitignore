@@ -2,6 +2,7 @@
 __pycache__/
 *.pyc
 .venv/
+.venv-train-amd/
 *.egg-info/
 build/
 dist/
@@ -9,8 +10,10 @@ dist/
 
 # 모델 아티팩트 — tools/export_pretrained.py로 재생성 가능
 models/packages/
+models/experiments/
 *.onnx
 *.pt
+runs/
 
 # 로컬 실행 산출물 (detect/eval 출력, 데모 사진)
 out/

@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "product_id": "toilet-paper-roll",
+  "candidate_status": "candidate",
+  "retrieval_date": "2026-07-13",
+  "seed": 713,
+  "positive": {
+    "provider": "Roboflow Universe",
+    "project": "testroboflow-mzzw9/toilet-paper-detection-pdgv2",
+    "landing_page": "https://universe.roboflow.com/testroboflow-mzzw9/toilet-paper-detection-pdgv2",
+    "author": "TestRoboflow",
+    "license": "CC BY 4.0",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/",
+    "expected_images": 126,
+    "expected_classes": [
+      "basket",
+      "toilet-paper"
+    ],
+    "class_ids": {
+      "toilet_paper_roll": 1
+    },
+    "split_names": {
+      "train": "train",
+      "valid": "val",
+      "test": "test"
+    },
+    "attribution": "toilet paper detection Dataset by TestRoboflow, licensed under CC BY 4.0"
+  },
+  "negative": {
+    "provider": "Ultralytics COCO128",
+    "landing_page": "https://docs.ultralytics.com/datasets/detect/coco128/",
+    "archive_url": "https://github.com/ultralytics/assets/releases/download/v0.0.0/coco128.zip",
+    "image_license": "COCO source-image licenses; preserve original attribution metadata",
+    "license_url": "https://cocodataset.org/#termsofuse",
+    "required_class_ids": [
+      41
+    ],
+    "required_classes": [
+      "cup"
+    ]
+  }
+}
