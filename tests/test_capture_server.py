@@ -99,6 +99,30 @@ def test_config_reports_fps(tmp_path):
     assert client.get("/config").json() == {"fps": 10}
 
 
+def test_second_ingest_rejected_first_unaffected(tmp_path):
+    """폰 1대 전제(MVP) — 두 번째 ingest 연결은 거절하고 첫 연결은 오염되지 않아야 한다 (리뷰 #1)."""
+    client = TestClient(create_app(out_dir=tmp_path))
+    with client.websocket_connect("/ws/ingest") as ws1:
+        session = hello(ws1)["session"]
+        ws1.send_bytes(pack_frame({"seq": 1, "client_ts": 0, "w": 64, "h": 48},
+                                  make_jpeg()))
+        ws1.receive_text()
+
+        with client.websocket_connect("/ws/ingest") as ws2:
+            rejection = json.loads(ws2.receive_text())
+            assert rejection["type"] == "error"
+
+        # 두 번째 연결이 닫혀도 첫 연결의 writer는 살아 있어야 한다
+        ws1.send_bytes(pack_frame({"seq": 2, "client_ts": 0, "w": 64, "h": 48},
+                                  make_jpeg()))
+        assert json.loads(ws1.receive_text()) == {"type": "ack", "seq": 2}
+
+    lines = (tmp_path / session / "manifest.jsonl").read_text(
+        encoding="utf-8").splitlines()
+    assert [json.loads(l)["seq"] for l in lines] == [1, 2]
+    assert len([p for p in tmp_path.iterdir() if p.is_dir()]) == 1  # 세션 오염 없음
+
+
 def test_server_restart_resume_counts_gap(tmp_path):
     """서버 재시작 후 재접속 — manifest 꼬리에서 last_seq를 복원해 공백을 세야 한다 (리뷰 #2)."""
     client1 = TestClient(create_app(out_dir=tmp_path))

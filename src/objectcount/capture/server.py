@@ -46,6 +46,7 @@ class CaptureState:
     detect_times: deque = field(default_factory=lambda: deque(maxlen=200))
     warning: str | None = None
     on_frame: Callable[[bytes], None] | None = None  # Task 5가 mailbox 연결
+    ingest_active: bool = False  # 폰 1대 전제(MVP) — 동시 ingest 거절 (리뷰 #1)
 
     def snapshot(self) -> dict:
         return {"recv_fps": _fps(self.recv_times),
@@ -159,6 +160,14 @@ def create_app(out_dir: str | Path, detector=None, default_fps: int = 5,
     @app.websocket("/ws/ingest")
     async def ingest(ws: WebSocket) -> None:
         await ws.accept()
+        if state.ingest_active:
+            await ws.send_text(json.dumps(
+                {"type": "error",
+                 "message": "이미 활성 캡처 연결이 있습니다 — 폰 1대 전제(MVP)"},
+                ensure_ascii=False))
+            await ws.close()
+            return
+        state.ingest_active = True
         try:
             while True:
                 message = await ws.receive()
@@ -177,6 +186,7 @@ def create_app(out_dir: str | Path, detector=None, default_fps: int = 5,
                     seq = _handle_frame(state, message["bytes"])
                     await ws.send_text(json.dumps({"type": "ack", "seq": seq}))
         finally:
+            state.ingest_active = False
             if state.writer is not None:
                 state.session_info["ended_at"] = time.time()
                 state.writer.write_session_info(state.session_info)
