@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ObjectCount 캡처</title>
+<style>
+  body { font-family: sans-serif; margin: 8px; background: #111; color: #eee; }
+  video { width: 100%; max-height: 45vh; background: #000; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+  .row label { width: 88px; flex-shrink: 0; }
+  .row input[type=range] { flex: 1; }
+  .off { opacity: 0.4; }
+  #status { font-size: 14px; }
+  button { padding: 10px 16px; font-size: 16px; }
+  #banner { background: #a33; padding: 6px; display: none; }
+</style>
+</head>
+<body>
+<div id="banner"></div>
+<video id="preview" autoplay playsinline muted></video>
+<div class="row"><button id="start">캡처 시작</button><span id="status">대기</span></div>
+<div class="row">
+  <label>해상도</label>
+  <select id="res">
+    <option value="1280x720" selected>1280×720</option>
+    <option value="1920x1080">1920×1080</option>
+    <option value="640x480">640×480</option>
+  </select>
+  <label style="width:auto">fps</label>
+  <input id="fps" type="number" min="1" max="30" value="5" style="width:56px">
+</div>
+<div class="row" id="zoomRow"><label>줌</label><input id="zoom" type="range" disabled><span id="zoomVal"></span></div>
+<div class="row" id="focusRow"><label>포커스</label>
+  <select id="focusMode" disabled><option value="continuous">자동</option><option value="manual">수동</option></select>
+  <input id="focusDist" type="range" disabled><span id="focusVal"></span></div>
+<div class="row" id="expRow"><label>노출 잠금</label><input id="expLock" type="checkbox" disabled><span id="expVal"></span></div>
+<script>
+const $ = id => document.getElementById(id);
+let stream = null, track = null, ws = null, timer = null, wakeLock = null;
+let seq = 0, ackSeq = 0, running = false, session = null, backoff = 1000;
+
+function setBanner(text) {
+  const banner = $('banner');
+  banner.textContent = text || '';
+  banner.style.display = text ? 'block' : 'none';
+}
+function refreshStatus() {
+  $('status').textContent = running
+    ? `전송 ${seq} · 확인 ${ackSeq} · 미확인 ${seq - ackSeq}` : '중지됨';
+}
+
+async function openCamera() {
+  const [w, h] = $('res').value.split('x').map(Number);
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  stream = await navigator.mediaDevices.getUserMedia({
+    video: { facingMode: { ideal: 'environment' },
+             width: { ideal: w }, height: { ideal: h } },
+    audio: false });
+  track = stream.getVideoTracks()[0];
+  $('preview').srcObject = stream;
+  bindControls();
+}
+
+function caps() { return track && track.getCapabilities ? track.getCapabilities() : {}; }
+function currentSettings() { return track && track.getSettings ? track.getSettings() : {}; }
+
+async function apply(constraints) {
+  try {
+    await track.applyConstraints({ advanced: [constraints] });
+    if (ws && ws.readyState === 1)
+      ws.send(JSON.stringify({ type: 'settings', settings: currentSettings() }));
+  } catch (e) { setBanner('설정 적용 실패: ' + e.message); }
+}
+
+function bindControls() {
+  const c = caps();
+  if (c.zoom) {
+    $('zoomRow').classList.remove('off');
+    const zoom = $('zoom');
+    zoom.min = c.zoom.min; zoom.max = c.zoom.max; zoom.step = c.zoom.step || 0.1;
+    zoom.value = currentSettings().zoom || c.zoom.min;
+    zoom.disabled = false;
+    $('zoomVal').textContent = zoom.value;
+    zoom.oninput = async () => {
+      await apply({ zoom: Number(zoom.value) });
+      $('zoomVal').textContent = zoom.value;
+    };
+  } else { $('zoomRow').classList.add('off'); $('zoomVal').textContent = '이 기기 미지원'; }
+
+  if (c.focusMode && c.focusMode.includes('manual') && c.focusDistance) {
+    $('focusRow').classList.remove('off');
+    const mode = $('focusMode'), dist = $('focusDist');
+    mode.disabled = false;
+    dist.min = c.focusDistance.min; dist.max = c.focusDistance.max;
+    dist.step = c.focusDistance.step || 0.01;
+    mode.onchange = async () => {
+      if (mode.value === 'manual') {
+        dist.disabled = false;
+        await apply({ focusMode: 'manual', focusDistance: Number(dist.value || dist.min) });
+      } else { dist.disabled = true; await apply({ focusMode: 'continuous' }); }
+    };
+    dist.oninput = async () => {
+      await apply({ focusMode: 'manual', focusDistance: Number(dist.value) });
+      $('focusVal').textContent = dist.value;
+    };
+  } else { $('focusRow').classList.add('off'); $('focusVal').textContent = '이 기기 미지원'; }
+
+  if (c.exposureMode && c.exposureMode.includes('manual')) {
+    $('expRow').classList.remove('off');
+    $('expLock').disabled = false;
+    $('expLock').onchange = async () =>
+      await apply({ exposureMode: $('expLock').checked ? 'manual' : 'continuous' });
+  } else { $('expRow').classList.add('off'); $('expVal').textContent = '이 기기 미지원'; }
+}
+
+function packFrame(header, payloadBuf) {
+  const headerBytes = new TextEncoder().encode(JSON.stringify(header));
+  const out = new Uint8Array(4 + headerBytes.length + payloadBuf.byteLength);
+  new DataView(out.buffer).setUint32(0, headerBytes.length);
+  out.set(headerBytes, 4);
+  out.set(new Uint8Array(payloadBuf), 4 + headerBytes.length);
+  return out;
+}
+
+function connect() {
+  ws = new WebSocket(`ws://${location.host}/ws/ingest`);
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => {
+    backoff = 1000;
+    setBanner(null);
+    ws.send(JSON.stringify({ type: 'hello', device: navigator.userAgent,
+      session, capabilities: caps(), settings: currentSettings() }));
+  };
+  ws.onmessage = ev => {
+    const msg = JSON.parse(ev.data);
+    if (msg.type === 'hello_ack') {
+      session = msg.session;
+      if (!$('fps').dataset.touched) $('fps').value = msg.fps;
+      startTimer();
+    }
+    if (msg.type === 'ack') { ackSeq = msg.seq; refreshStatus(); }
+  };
+  ws.onclose = () => {
+    if (!running) return;
+    setBanner('서버 연결 끊김 — 재접속 중');
+    setTimeout(connect, backoff);
+    backoff = Math.min(backoff * 2, 10000);
+  };
+}
+
+const canvas = document.createElement('canvas');
+async function captureFrame() {
+  if (!running || document.hidden || !ws || ws.readyState !== 1) return;
+  const video = $('preview');
+  if (!video.videoWidth) return;
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0);
+  const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.85));
+  if (!blob) return;
+  seq += 1;
+  ws.send(packFrame({ seq, client_ts: Date.now() / 1000,
+                      w: canvas.width, h: canvas.height },
+                    await blob.arrayBuffer()));
+  refreshStatus();
+}
+
+function startTimer() {
+  clearInterval(timer);
+  timer = setInterval(captureFrame, 1000 / Number($('fps').value));
+}
+
+async function keepAwake() {
+  try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) setBanner('백그라운드 — 캡처 일시정지');
+  else { setBanner(null); keepAwake(); }
+});
+
+$('start').onclick = async () => {
+  if (running) {
+    running = false;
+    clearInterval(timer);
+    if (ws) ws.close();
+    $('start').textContent = '캡처 시작';
+    refreshStatus();
+    return;
+  }
+  try { await openCamera(); }
+  catch (e) { setBanner('카메라 접근 실패: ' + e.message); return; }
+  await keepAwake();
+  running = true;
+  connect();
+  $('start').textContent = '캡처 중지';
+};
+$('fps').onchange = () => { $('fps').dataset.touched = '1'; if (running) startTimer(); };
+$('res').onchange = async () => { if (running) await openCamera(); };
+</script>
+</body>
+</html>
