@@ -1,6 +1,7 @@
 import hashlib
 import io
 import json
+from datetime import datetime, timezone
 from email.message import Message
 from pathlib import Path
 from urllib.error import HTTPError
@@ -8,11 +9,13 @@ from urllib.parse import parse_qs, urlparse
 
 import cv2
 import numpy as np
+import pytest
 
 from tools.training.acquire_commons import (
     CommonsPolicy,
     acquire_commons,
     iter_category_files,
+    main,
 )
 
 
@@ -175,6 +178,38 @@ def test_iter_category_files_follows_continue_and_yields_only_raster_originals(t
     assert files[0]["url"] == "https://upload/one.jpg"
 
 
+def test_iter_category_files_closes_retryable_api_http_error(tmp_path):
+    failed_response = Response(b"unavailable")
+    unavailable = HTTPError(
+        "https://commons.wikimedia.org/w/api.php", 503, "unavailable", {},
+        failed_response,
+    )
+    opener = FakeOpener([unavailable, api_response(api_pages())])
+
+    assert list(iter_category_files(
+        CommonsPolicy.from_json(write_policy(tmp_path / "commons.json")),
+        opener,
+    )) == []
+    assert failed_response.closed
+
+
+def test_iter_category_files_closes_api_http_errors_when_retry_is_exhausted(
+        tmp_path):
+    responses = [Response(b"unavailable"), Response(b"still unavailable")]
+    opener = FakeOpener([
+        HTTPError("https://commons.wikimedia.org/w/api.php", 503,
+                  "unavailable", {}, response)
+        for response in responses
+    ])
+
+    with pytest.raises(HTTPError):
+        list(iter_category_files(
+            CommonsPolicy.from_json(write_policy(tmp_path / "commons.json")),
+            opener,
+        ))
+    assert all(response.closed for response in responses)
+
+
 def manifest_items(output: Path) -> list[dict]:
     return json.loads((output / "manifest.json").read_text(encoding="utf-8"))["items"]
 
@@ -257,6 +292,22 @@ def test_acquire_accepts_once_and_rejects_duplicate_content(tmp_path):
     assert len(list((tmp_path / "out/images").iterdir())) == 1
 
 
+def test_acquire_records_stable_page_url_and_deterministic_utc_retrieval_time(
+        tmp_path):
+    retrieved_at = datetime(2026, 7, 13, 1, 2, 3, tzinfo=timezone.utc)
+
+    manifest = acquire_commons(
+        write_policy(tmp_path / "policy.json"),
+        tmp_path / "out",
+        acquisition_opener(Response(image_bytes())),
+        clock=lambda: retrieved_at,
+    )
+
+    item = manifest["items"][0]
+    assert item["page_url"] == "https://commons.wikimedia.org/?curid=1"
+    assert item["retrieved_at"] == "2026-07-13T01:02:03Z"
+
+
 def test_acquire_records_interrupted_download_and_removes_temporary_file(tmp_path):
     opener = acquisition_opener(InterruptedResponse(image_bytes()))
 
@@ -270,7 +321,9 @@ def test_acquire_records_interrupted_download_and_removes_temporary_file(tmp_pat
 
 def test_acquire_retries_one_http_503_then_accepts(tmp_path):
     jpeg = image_bytes()
-    unavailable = HTTPError("https://upload/0.jpg", 503, "unavailable", {}, None)
+    failed_response = Response(b"unavailable")
+    unavailable = HTTPError(
+        "https://upload/0.jpg", 503, "unavailable", {}, failed_response)
     opener = acquisition_opener(
         unavailable,
         Response(jpeg),
@@ -282,6 +335,38 @@ def test_acquire_retries_one_http_503_then_accepts(tmp_path):
 
     assert manifest["items"][0]["status"] == "accepted"
     assert opener.urls.count("https://upload/0.jpg") == 2
+    assert failed_response.closed
+
+
+def test_acquire_closes_both_image_http_errors_when_retry_is_exhausted(tmp_path):
+    responses = [Response(b"unavailable"), Response(b"still unavailable")]
+    errors = [
+        HTTPError("https://upload/0.jpg", 503, "unavailable", {}, response)
+        for response in responses
+    ]
+    opener = acquisition_opener(
+        *errors,
+        pages=[page(1, "File:0.jpg", valid_imageinfo("https://upload/0.jpg"))],
+    )
+
+    manifest = acquire_commons(
+        write_policy(tmp_path / "policy.json"), tmp_path / "out", opener)
+
+    assert manifest["items"][0]["reason"] == "http-error-503"
+    assert all(response.closed for response in responses)
+
+
+def test_acquire_closes_response_with_malformed_content_length(tmp_path):
+    response = Response(image_bytes())
+    response.headers["Content-Length"] = "not-an-integer"
+
+    manifest = acquire_commons(
+        write_policy(tmp_path / "policy.json"), tmp_path / "out",
+        acquisition_opener(response),
+    )
+
+    assert manifest["items"][0]["status"] == "failed"
+    assert response.closed
 
 
 def test_acquire_writes_manifest_after_each_item_and_resumes_without_duplicates(
@@ -316,3 +401,146 @@ def test_acquire_writes_empty_manifest_when_category_has_no_files(tmp_path):
 
     assert manifest["items"] == []
     assert manifest_items(output) == []
+
+
+def test_acquire_fails_clearly_on_malformed_existing_manifest(tmp_path):
+    output = tmp_path / "out"
+    output.mkdir()
+    (output / "manifest.json").write_text("{broken", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="malformed Commons manifest"):
+        acquire_commons(
+            write_policy(tmp_path / "policy.json"), output,
+            FakeOpener([]),
+        )
+
+
+@pytest.mark.parametrize(("field", "value"), [
+    ("schema_version", 99),
+    ("source", "Another source"),
+    ("category", "Category:Paper towels"),
+])
+def test_acquire_rejects_incompatible_existing_manifest_identity(
+        tmp_path, field, value):
+    output = tmp_path / "out"
+    output.mkdir()
+    manifest = {
+        "schema_version": 1,
+        "source": "Wikimedia Commons",
+        "category": "Category:Toilet paper rolls",
+        "items": [],
+    }
+    manifest[field] = value
+    (output / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match=field):
+        acquire_commons(
+            write_policy(tmp_path / "policy.json"), output,
+            FakeOpener([]),
+        )
+
+
+def test_acquire_rejects_malformed_existing_manifest_item(tmp_path):
+    output = tmp_path / "out"
+    output.mkdir()
+    manifest = {
+        "schema_version": 1,
+        "source": "Wikimedia Commons",
+        "category": "Category:Toilet paper rolls",
+        "items": [{"page_id": 1}],
+    }
+    (output / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="item 0 missing required fields"):
+        acquire_commons(
+            write_policy(tmp_path / "policy.json"), output,
+            FakeOpener([]),
+        )
+
+
+def test_acquire_rejects_accepted_item_whose_image_is_missing(tmp_path):
+    policy_path = write_policy(tmp_path / "policy.json")
+    output = tmp_path / "out"
+    manifest = acquire_commons(
+        policy_path, output, acquisition_opener(Response(image_bytes())))
+    (output / manifest["items"][0]["path"]).unlink()
+
+    with pytest.raises(ValueError, match="accepted path does not exist"):
+        acquire_commons(policy_path, output, FakeOpener([]))
+
+
+def test_acquire_rejects_accepted_item_with_inconsistent_path(tmp_path):
+    policy_path = write_policy(tmp_path / "policy.json")
+    output = tmp_path / "out"
+    acquire_commons(
+        policy_path, output, acquisition_opener(Response(image_bytes())))
+    manifest_path = output / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["items"][0]["path"] = "../outside.jpg"
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="path is inconsistent"):
+        acquire_commons(policy_path, output, FakeOpener([]))
+
+
+def test_acquire_removes_manifest_temporary_file_when_replace_fails(
+        tmp_path, monkeypatch):
+    output = tmp_path / "out"
+
+    def fail_replace(source, destination):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr("tools.training.acquire_commons.os.replace", fail_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        acquire_commons(
+            write_policy(tmp_path / "policy.json"), output,
+            FakeOpener([api_response(api_pages())]),
+        )
+    assert not (output / ".manifest.json.tmp").exists()
+
+
+def test_cli_acquisition_creates_artifacts_and_prints_totals(tmp_path, capsys):
+    output = tmp_path / "out"
+
+    exit_code = main([
+        "--config", str(write_policy(tmp_path / "policy.json")),
+        "--out", str(output),
+    ], opener=acquisition_opener(Response(image_bytes())))
+
+    assert exit_code == 0
+    assert (output / "manifest.json").is_file()
+    assert len(list((output / "images").iterdir())) == 1
+    assert "accepted=1 rejected=0 failed=0" in capsys.readouterr().out
+
+
+def test_cli_verify_checks_manifest_and_prints_totals(tmp_path, capsys):
+    output = tmp_path / "out"
+    acquire_commons(
+        write_policy(tmp_path / "policy.json"), output,
+        acquisition_opener(Response(image_bytes())),
+        clock=lambda: datetime(2026, 7, 13, tzinfo=timezone.utc),
+    )
+    capsys.readouterr()
+
+    exit_code = main(["--verify", str(output)])
+
+    assert exit_code == 0
+    assert "accepted=1 rejected=0 failed=0" in capsys.readouterr().out
+
+
+def test_cli_returns_nonzero_when_acquisition_or_verification_fails(
+        tmp_path, capsys):
+    missing_policy = main([
+        "--config", str(tmp_path / "missing.json"),
+        "--out", str(tmp_path / "out"),
+    ])
+    broken_output = tmp_path / "broken"
+    broken_output.mkdir()
+    (broken_output / "manifest.json").write_text("{broken", encoding="utf-8")
+
+    broken_manifest = main(["--verify", str(broken_output)])
+
+    assert missing_policy == 1
+    assert broken_manifest == 1
+    assert capsys.readouterr().err.count("error:") == 2
