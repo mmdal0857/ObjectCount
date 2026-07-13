@@ -38,5 +38,19 @@
     "required_classes": [
       "cup"
     ]
+  },
+  "environment_evidence": {
+    "verified_at": "2026-07-13",
+    "distro": "Ubuntu-22.04 (WSL2)",
+    "python": "3.10.12",
+    "torch": "2.10.0+rocm7.2.0.gitb6ee5fde",
+    "torchvision": "0.25.0+rocm7.2.0.git82df5f59",
+    "hip": "7.2.26015",
+    "device": "AMD Radeon RX 9070 XT",
+    "autograd_steps": 20,
+    "autograd_gate": "pass",
+    "ultralytics": "8.3.169",
+    "ultralytics_smoke": "coco8, 1 epoch, imgsz 320, batch 2, device 0, amp false: pass",
+    "amp": "disabled after Ultralytics AMP anomaly gate on this ROCm stack"
   }
 }

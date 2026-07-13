@@ -6,6 +6,7 @@ batch: 8
 workers: 4
 seed: 713
 deterministic: true
+amp: false
 device: 0
 project: out/training/toilet-paper-roll/runs
 name: candidate-v1
