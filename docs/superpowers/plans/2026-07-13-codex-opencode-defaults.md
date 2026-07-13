@@ -146,11 +146,20 @@ permission:
   edit: allow
   bash:
     "*": allow
+    "git *": deny
+    "git status*": allow
+    "git diff*": allow
+    "git log*": allow
+    "git show*": allow
+    "git rev-parse*": allow
+    "git ls-files*": allow
+    "git branch --show-current*": allow
+    "git branch --list*": allow
+    "git commit*": ask
     "git push*": deny
     "git reset --hard*": deny
     "git clean*": deny
     "git branch -D*": deny
-    "git commit*": ask
   external_directory: ask
   task: deny
   question: deny
@@ -162,6 +171,7 @@ Before acting:
 1. Read the repository `AGENTS.md` and every project context file it requires.
 2. Inspect relevant files and current Git status.
 3. Keep unrelated user changes untouched.
+4. Use repository-relative paths for files inside the worktree; do not construct absolute paths for repository reads.
 
 When finished, return these headings:
 
@@ -170,7 +180,7 @@ When finished, return these headings:
 ## Commands and verification
 ## Risks or blockers
 
-Do not claim success without command output that supports it. Do not commit unless the task explicitly authorizes a commit. Never push or use destructive Git commands.
+Under `## Commands and verification`, list every file, tool, and command actually read or run, together with its result. Never report `None` when tools were used. Do not claim success without command output that supports it. Do not commit unless the task explicitly authorizes a commit. Never push or use destructive Git commands.
 ```
 
 - [ ] **Step 4: Preserve the provider and select the worker in `opencode.json`**
@@ -214,21 +224,39 @@ if ($resolved.model -ne 'lmstudio/google/gemma-4-12b') { throw 'model changed un
 $agent = opencode debug agent codex-worker | ConvertFrom-Json -Depth 100
 if ($agent.model.providerID -ne 'lmstudio') { throw 'worker provider missing' }
 if ($agent.model.modelID -ne 'google/gemma-4-12b') { throw 'worker model missing' }
-$denials = @($agent.permission | Where-Object { $_.permission -eq 'bash' -and $_.action -eq 'deny' } | ForEach-Object pattern)
-foreach ($pattern in @('git push*','git reset --hard*','git clean*','git branch -D*')) {
-  if ($pattern -notin $denials) { throw "denial missing: $pattern" }
+$bash = @($agent.permission | Where-Object permission -eq 'bash')
+function Resolve-BashPermission([string]$command) {
+  $action = $null
+  foreach ($rule in $bash) { if ($command -like $rule.pattern) { $action = $rule.action } }
+  $action
 }
-if (-not ($agent.permission | Where-Object { $_.permission -eq 'bash' -and $_.pattern -eq 'git commit*' -and $_.action -eq 'ask' })) { throw 'commit ask missing' }
+if ((Resolve-BashPermission 'git fetch') -ne 'deny') { throw 'git * does not resolve to deny' }
+foreach ($command in @('git status','git diff','git log','git show','git rev-parse HEAD','git ls-files','git branch --show-current','git branch --list')) {
+  if ((Resolve-BashPermission $command) -ne 'allow') { throw "read-only command does not resolve to allow: $command" }
+}
+if ((Resolve-BashPermission 'git commit -m test') -ne 'ask') { throw 'git commit* does not resolve to ask' }
+foreach ($command in @('git push','git reset --hard','git clean','git branch -D test')) {
+  if ((Resolve-BashPermission $command) -ne 'deny') { throw "destructive command does not resolve to deny: $command" }
+}
+$allows = @($bash | Where-Object action -eq 'allow' | ForEach-Object pattern)
+foreach ($bypass in @('git -C . push','git branch --delete --force')) {
+  if ($bypass -in $allows) { throw "bypass unexpectedly allowlisted: $bypass" }
+  if ((Resolve-BashPermission $bypass) -ne 'deny') { throw "bypass not covered by git * deny: $bypass" }
+}
 "resolved.default_agent=$($resolved.default_agent)"
 "resolved.model=$($resolved.model)"
 "agent.model=$($agent.model.providerID)/$($agent.model.modelID)"
-"agent.git_denials=$($denials -join ', ')"
+"git.boundary=$(Resolve-BashPermission 'git fetch')"
+"git.read_only=8/8 allow"
+"git.commit=$(Resolve-BashPermission 'git commit -m test')"
+"git.destructive=4/4 deny"
+"git.bypasses=2/2 deny"
 $agentListMatch = opencode agent list | Select-String -Pattern 'codex-worker'
 if (-not $agentListMatch) { throw 'codex-worker missing from agent list' }
 $agentListMatch
 ```
 
-Expected: exit code `0`; resolved agent is `codex-worker`, the global and worker models resolve to `lmstudio/google/gemma-4-12b`, all four destructive Git patterns are denied, commits require approval, and the agent appears in the list.
+Expected: exit code `0`; resolved agent is `codex-worker`; the global and worker models resolve to `lmstudio/google/gemma-4-12b`; the general Git boundary resolves to deny; all eight direct read-only forms resolve to allow; commits require approval; all four explicit destructive forms and both static bypass cases resolve to deny; and the agent appears in the list.
 
 Do not make a Git commit: these are user-global personal settings outside the repository.
 
@@ -307,15 +335,26 @@ Run:
 
 ```powershell
 $before = git status --porcelain=v1
-$output = opencode run --agent codex-worker --format default "Read AGENTS.md and its required context files. Do not edit anything. Report the current project phase using exactly the four required headings."
+$output = opencode run --agent codex-worker --format default "Using repository-relative paths only and without a failed path attempt, read AGENTS.md and its required CLAUDE.md and CONTEXT.md files. Do not edit anything. Report the current project phase using exactly the four required headings, and name all three files under Commands and verification."
 $probeExit = $LASTEXITCODE
 Write-Output "probeExit=$probeExit"
 if ($probeExit -ne 0) { throw "OpenCode probe exited $probeExit" }
 $output
-foreach ($heading in @('## Summary', '## Changed files', '## Commands and verification', '## Risks or blockers')) {
-  if (($output -join "`n") -notmatch [regex]::Escape($heading)) { throw "Missing heading: $heading" }
+$outputText = $output -join "`n"
+$headings = @('## Summary', '## Changed files', '## Commands and verification', '## Risks or blockers')
+foreach ($heading in $headings) {
+  if ($outputText -notmatch "(?m)^$([regex]::Escape($heading))$") { throw "Missing heading: $heading" }
   Write-Output "heading[$heading]=PASS"
 }
+$actualHeadings = @([regex]::Matches($outputText, '(?m)^## .+$') | ForEach-Object Value)
+if ($actualHeadings.Count -ne 4) { throw "Expected exactly four headings, got $($actualHeadings.Count)" }
+$commandsSection = ($outputText -split '(?m)^## Commands and verification$', 2)[1] -split '(?m)^## Risks or blockers$', 2 | Select-Object -First 1
+foreach ($file in @('AGENTS.md','CLAUDE.md','CONTEXT.md')) {
+  if ($commandsSection -notmatch [regex]::Escape($file)) { throw "Context file missing from verification report: $file" }
+}
+if ($outputText -match '(?i)no such file|cannot find path|failed path attempt') { throw 'Probe reported a failed path attempt' }
+Write-Output 'headingCount=4'
+Write-Output 'contextFiles=AGENTS.md, CLAUDE.md, CONTEXT.md'
 $after = git status --porcelain=v1
 Write-Output 'beforeStatus:'
 if ($before) { $before } else { Write-Output '<clean>' }
