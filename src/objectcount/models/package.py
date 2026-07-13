@@ -24,6 +24,8 @@ class ModelPackage:
     classes: list[str]
     active_class_ids: list[int] | None
     area_prior: float | None
+    candidate_status: str | None = None
+    default_confidence: float | None = None
 
     @property
     def model_path(self) -> Path:
@@ -63,6 +65,15 @@ def load_package(path: str | Path) -> ModelPackage:
         raise ModelPackageError(
             f"classes는 비어있지 않은 문자열 목록이어야 합니다: {classes!r}")
 
+    default_confidence = manifest.get("default_confidence")
+    if (default_confidence is not None
+            and (not isinstance(default_confidence, (int, float))
+                 or isinstance(default_confidence, bool)
+                 or not 0 <= default_confidence <= 1)):
+        raise ModelPackageError(
+            "default_confidence는 0 이상 1 이하 숫자여야 합니다: "
+            f"{default_confidence!r}")
+
     package = ModelPackage(
         root=root,
         product_id=manifest["product_id"],
@@ -72,6 +83,9 @@ def load_package(path: str | Path) -> ModelPackage:
         classes=list(manifest["classes"]),
         active_class_ids=manifest.get("active_class_ids"),
         area_prior=manifest.get("area_prior"),
+        candidate_status=manifest.get("candidate_status"),
+        default_confidence=(float(default_confidence)
+                            if default_confidence is not None else None),
     )
     if not package.model_path.is_file():
         raise ModelPackageError(f"model.onnx가 없습니다: {package.model_path}")
