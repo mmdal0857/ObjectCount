@@ -14,7 +14,7 @@ from typing import Callable
 from fastapi import FastAPI, WebSocket
 from fastapi.responses import FileResponse, JSONResponse
 
-from ..frames.spool import SpoolWriter
+from ..frames.spool import MANIFEST_NAME, SESSION_INFO_NAME, SpoolWriter
 from .live import LatestFrameMailbox, ViewerHub, live_worker
 from .protocol import unpack_frame
 
@@ -55,10 +55,46 @@ class CaptureState:
                 "session": self.session_name}
 
 
+def _last_manifest_seq(session_dir: Path) -> int | None:
+    """manifest 꼬리의 seq — 서버 재시작 후 재접속에도 공백 추적을 잇는다 (리뷰 #2)."""
+    last = None
+    try:
+        with open(session_dir / MANIFEST_NAME, encoding="utf-8") as manifest:
+            for line in manifest:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    last = int(json.loads(line)["seq"])
+                except (ValueError, KeyError, json.JSONDecodeError):
+                    continue  # 크래시로 잘린 줄은 무시
+    except OSError:
+        return None
+    return last
+
+
+def _load_session_info(session_dir: Path) -> dict | None:
+    try:
+        return json.loads((session_dir / SESSION_INFO_NAME)
+                          .read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _new_session_info(name: str, message: dict) -> dict:
+    return {"session": name,
+            "device": message.get("device"),
+            "capabilities": message.get("capabilities", {}),
+            "settings_history": [],
+            "started_at": time.time(),
+            "ended_at": None}
+
+
 def _handle_hello(state: CaptureState, message: dict) -> str:
     requested = message.get("session")
-    if requested and (state.out_dir / requested / "manifest.jsonl").exists():
+    if requested and (state.out_dir / requested / MANIFEST_NAME).exists():
         name = requested  # 재접속 — 같은 캡처 세션에 이어쓰기 (스펙 §7)
+        state.last_seq = _last_manifest_seq(state.out_dir / name)
     else:
         name = _session_dir_name(message.get("device") or "phone")
         state.last_seq = None
@@ -66,15 +102,14 @@ def _handle_hello(state: CaptureState, message: dict) -> str:
         state.writer.close()
     state.session_name = name
     state.writer = SpoolWriter(state.out_dir / name)
-    if name == requested and state.session_info.get("session") == name:
+    if name == requested:
+        if state.session_info.get("session") != name:
+            # 서버 재시작 후 재접속 — 디스크의 session.json을 이어받는다
+            state.session_info = (_load_session_info(state.out_dir / name)
+                                  or _new_session_info(name, message))
         state.session_info["reconnected_at"] = time.time()
     else:
-        state.session_info = {"session": name,
-                              "device": message.get("device"),
-                              "capabilities": message.get("capabilities", {}),
-                              "settings_history": [],
-                              "started_at": time.time(),
-                              "ended_at": None}
+        state.session_info = _new_session_info(name, message)
     _record_settings(state, message.get("settings", {}))
     return name
 

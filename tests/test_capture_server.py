@@ -97,3 +97,44 @@ def test_spooled_session_replayable(tmp_path):
 def test_config_reports_fps(tmp_path):
     client = TestClient(create_app(out_dir=tmp_path, default_fps=10))
     assert client.get("/config").json() == {"fps": 10}
+
+
+def test_server_restart_resume_counts_gap(tmp_path):
+    """서버 재시작 후 재접속 — manifest 꼬리에서 last_seq를 복원해 공백을 세야 한다 (리뷰 #2)."""
+    client1 = TestClient(create_app(out_dir=tmp_path))
+    with client1.websocket_connect("/ws/ingest") as ws:
+        session = hello(ws)["session"]
+        ws.send_bytes(pack_frame({"seq": 1, "client_ts": 0, "w": 64, "h": 48},
+                                 make_jpeg()))
+        ws.receive_text()
+
+    client2 = TestClient(create_app(out_dir=tmp_path))  # 서버 재시작
+    with client2.websocket_connect("/ws/ingest") as ws:
+        assert hello(ws, session=session)["session"] == session
+        ws.send_bytes(pack_frame({"seq": 4, "client_ts": 0, "w": 64, "h": 48},
+                                 make_jpeg()))
+        ws.receive_text()
+    assert client2.get("/stats").json()["gaps"] == 2  # seq 2-3 공백
+
+
+def test_server_restart_resume_preserves_session_info(tmp_path):
+    """서버 재시작 후 재접속 — 기존 session.json의 started_at·settings_history를 보존해야 한다."""
+    client1 = TestClient(create_app(out_dir=tmp_path))
+    with client1.websocket_connect("/ws/ingest") as ws:
+        session = hello(ws)["session"]
+        ws.send_bytes(pack_frame({"seq": 1, "client_ts": 0, "w": 64, "h": 48},
+                                 make_jpeg()))
+        ws.receive_text()
+    info_before = json.loads((tmp_path / session / "session.json")
+                             .read_text(encoding="utf-8"))
+
+    client2 = TestClient(create_app(out_dir=tmp_path))  # 서버 재시작
+    with client2.websocket_connect("/ws/ingest") as ws:
+        hello(ws, session=session)
+
+    info_after = json.loads((tmp_path / session / "session.json")
+                            .read_text(encoding="utf-8"))
+    assert info_after["started_at"] == info_before["started_at"]
+    assert len(info_after["settings_history"]) \
+        == len(info_before["settings_history"]) + 1
+    assert "reconnected_at" in info_after
