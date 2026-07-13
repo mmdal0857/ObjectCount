@@ -45,7 +45,7 @@ docs/wiki/
   frames.md          # 프레임 파이프라인: iter_frames, sources, spool
   capture.md         # 캡처 도구: 폰 스트리밍, 세션 폴더, 리플레이
   training.md        # 학습 파이프라인: 프로덕트 등록, WSL ROCm, 프로덕트 후보 게이트
-  orchestration.md   # 멀티 LLM 작업 구조: 역할 분담, 워크플로, 채널
+  orchestration.md   # ObjectCount 특화 협업 사실만: 워크트리 맵, 리뷰 파일 규칙, 에이전트 담당 영역
 ```
 
 ### 페이지 포맷
@@ -66,6 +66,10 @@ housekeeping Step 2.5(기존 정의)가 그대로 작동한다: 세션 커밋 �
 
 여기에 **위키 린트**를 추가한다(Karpathy lint 연산): housekeeping마다 모순되는 서술·낡은 주장·고아 페이지·깨진 링크를 점검하고 발견분을 보고한다. 낡음이 위키의 제1 실패 모드이므로 린트는 생략하지 않는다.
 
+**갱신 트리거** (grill 세션 확정):
+- 평상시: 큰 작업 단위 완료(기능 커밋·페이즈 마감) 시 Claude가 housekeeping을 먼저 제안한다 — 전역 컨벤션에 명시
+- 예외: 아키텍처가 바뀌는 커밋(새 모듈·인터페이스 변경)은 위키 갱신을 같은 세션에 포함한다. 예: `image_io.py` 신설은 동반 대상, 문서 오타 수정은 아님
+
 ## 전역 컨벤션
 
 `~/.claude/rules/llm-wiki-convention.md` 신규 작성:
@@ -79,7 +83,7 @@ housekeeping Step 2.5(기존 정의)가 그대로 작동한다: 세션 커밋 �
 
 ## 초기 시드
 
-Claude가 기존 문서에서 5개 페이지 초안을 압축 작성하고, Gemma 리뷰(무료)로 사실 검증 후 커밋한다. `orchestration.md`는 2026-07-13 파악한 멀티 LLM 구조(역할 분담, codex-collab 워크플로, Orca 태스크 시스템, OpenCode 워커)를 담는다.
+Claude가 기존 문서에서 5개 페이지 초안을 압축 작성한다. 검증은 **Codex Workflow R이 주도**한다 — 시드 커밋 diff를 레포 안에서 코드와 직접 대조한다(코드 대조는 Codex만 가능, grill 세션 확정). Gemma는 선택적 보조로 CONTEXT.md 용어 일관성만 체크한다. `orchestration.md`는 ObjectCount 특화 사실만 담는다(워크트리 맵, 리뷰 파일 규칙 `*-for-AGENTS.md`/`*-for-claude.md`, 에이전트 담당 영역·제약). 전역 협업 구조(워크플로 종류, CLI)는 전역 CLAUDE.md·스킬로 링크만 한다 — non-obvious only 원칙 (grill 세션 확정).
 
 ## 비범위
 
