@@ -1,4 +1,7 @@
 """캡처 CLI — adb 안내·디스크 경고·인자 검증. 서버 기동은 mock."""
+import threading
+import time
+
 import pytest
 
 pytest.importorskip("fastapi")
@@ -62,3 +65,43 @@ def test_broken_package_degrades_to_capture_only(tmp_path, monkeypatch, capsys):
                      "--package", str(tmp_path / "없는패키지")])
     assert code == 0  # 캡처가 우선 — 감지 실패는 경고 강등
     assert "감지 없이 캡처만" in capsys.readouterr().err
+
+
+def test_adb_reverse_keeper_reasserts(monkeypatch):
+    """USB 재연결 시 reverse 규칙이 사라지므로 주기적으로 다시 걸어야 한다 (실기기 검증 발견)."""
+    calls = []
+    monkeypatch.setattr(cli.shutil, "which", lambda name: "adb")
+
+    class Result:
+        returncode = 0
+        stderr = ""
+        stdout = ""
+    monkeypatch.setattr(cli.subprocess, "run",
+                        lambda cmd, **k: calls.append(cmd) or Result())
+
+    stop = threading.Event()
+    thread = threading.Thread(target=cli.adb_reverse_keeper,
+                              args=(8377, stop, 0.01), daemon=True)
+    thread.start()
+    deadline = time.time() + 2.0
+    while len(calls) < 2 and time.time() < deadline:
+        time.sleep(0.01)
+    stop.set()
+    thread.join(timeout=2.0)
+    assert len(calls) >= 2  # 한 번이 아니라 계속 재설정
+    assert calls[0] == ["adb", "reverse", "tcp:8377", "tcp:8377"]
+
+
+def test_keeper_started_unless_no_adb(tmp_path, monkeypatch):
+    import uvicorn
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: None)
+    monkeypatch.setattr(cli.shutil, "which", lambda name: None)
+    started = []
+    monkeypatch.setattr(cli, "_start_reverse_keeper",
+                        lambda port: started.append(port) or threading.Event())
+
+    assert cli.main(["--out", str(tmp_path), "--no-detect", "--no-adb"]) == 0
+    assert started == []  # --no-adb면 keeper 없음
+
+    assert cli.main(["--out", str(tmp_path), "--no-detect"]) == 0
+    assert started == [8377]

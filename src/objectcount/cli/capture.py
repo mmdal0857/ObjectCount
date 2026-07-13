@@ -5,7 +5,10 @@ import argparse
 import shutil
 import subprocess
 import sys
+import threading
 from pathlib import Path
+
+_REVERSE_INTERVAL_S = 5.0
 
 
 def try_adb_reverse(port: int) -> str:
@@ -19,6 +22,24 @@ def try_adb_reverse(port: int) -> str:
         detail = (result.stderr or result.stdout).strip()
         return f"adb reverse 실패: {detail}. {manual}"
     return f"adb reverse tcp:{port} 설정 완료"
+
+
+def adb_reverse_keeper(port: int, stop: threading.Event,
+                       interval_s: float = _REVERSE_INTERVAL_S) -> None:
+    """USB 재연결 시 adb reverse 규칙이 사라지므로 주기적으로 재설정한다 (실기기 검증 발견)."""
+    while not stop.wait(interval_s):
+        adb = shutil.which("adb")
+        if adb is None:
+            continue
+        subprocess.run([adb, "reverse", f"tcp:{port}", f"tcp:{port}"],
+                       capture_output=True, text=True)
+
+
+def _start_reverse_keeper(port: int) -> threading.Event:
+    stop = threading.Event()
+    threading.Thread(target=adb_reverse_keeper, args=(port, stop),
+                     daemon=True).start()
+    return stop
 
 
 def check_disk(out_dir: Path, threshold_gb: float = 2.0) -> str | None:
@@ -75,8 +96,10 @@ def main(argv: list[str] | None = None) -> int:
     if disk_warning:
         print(disk_warning, file=sys.stderr)
 
+    stop_keeper = None
     if not args.no_adb:
         print(try_adb_reverse(args.port))
+        stop_keeper = _start_reverse_keeper(args.port)
 
     print(f"폰에서 열기: http://localhost:{args.port}/phone")
     print(f"PC 뷰어:     http://localhost:{args.port}/")
@@ -85,6 +108,8 @@ def main(argv: list[str] | None = None) -> int:
     app = create_app(out_dir=out_dir, detector=detector,
                      default_fps=args.fps, startup_warning=warning)
     uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
+    if stop_keeper is not None:
+        stop_keeper.set()
     return 0
 
 
