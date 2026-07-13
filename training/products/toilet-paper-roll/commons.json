@@ -1,0 +1,26 @@
+{
+  "api_url": "https://commons.wikimedia.org/w/api.php",
+  "category": "Category:Toilet paper rolls",
+  "max_files": 100,
+  "max_bytes": 20971520,
+  "min_width": 480,
+  "min_height": 360,
+  "accepted_mime_types": [
+    "image/jpeg",
+    "image/png",
+    "image/webp"
+  ],
+  "accepted_licenses": [
+    "CC0",
+    "Public domain",
+    "CC BY 2.0",
+    "CC BY 2.5",
+    "CC BY 3.0",
+    "CC BY 4.0",
+    "CC BY-SA 2.0",
+    "CC BY-SA 2.5",
+    "CC BY-SA 3.0",
+    "CC BY-SA 4.0"
+  ],
+  "user_agent": "ObjectCount/0.1 (training data acquisition)"
+}
