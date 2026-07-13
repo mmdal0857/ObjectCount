@@ -117,6 +117,9 @@ def write_policy(path: Path, **overrides) -> Path:
             "CC BY-SA 4.0",
         ],
         "user_agent": "ObjectCount/0.1 (training data acquisition)",
+        "request_delay_seconds": 0.0,
+        "max_retries": 1,
+        "retry_backoff_seconds": [0.0],
     }
     policy.update(overrides)
     path.write_text(json.dumps(policy), encoding="utf-8")
@@ -336,6 +339,64 @@ def test_acquire_retries_one_http_503_then_accepts(tmp_path):
     assert manifest["items"][0]["status"] == "accepted"
     assert opener.urls.count("https://upload/0.jpg") == 2
     assert failed_response.closed
+
+
+def test_acquire_honors_capped_retry_after_for_http_429(tmp_path):
+    jpeg = image_bytes()
+    failed_response = Response(b"rate limited")
+    error = HTTPError(
+        "https://upload/0.jpg", 429, "rate limited",
+        {"Retry-After": "999"}, failed_response)
+    sleeps = []
+
+    manifest = acquire_commons(
+        write_policy(tmp_path / "policy.json"), tmp_path / "out",
+        acquisition_opener(
+            error, Response(jpeg),
+            pages=[page(1, "File:0.jpg", valid_imageinfo("https://upload/0.jpg"))],
+        ),
+        sleeper=sleeps.append,
+    )
+
+    assert manifest["items"][0]["status"] == "accepted"
+    assert 120.0 in sleeps
+    assert failed_response.closed
+
+
+def test_acquire_replaces_failed_row_when_resuming(tmp_path):
+    policy_path = write_policy(tmp_path / "policy.json", max_retries=0)
+    output = tmp_path / "out"
+    first = acquisition_opener(
+        HTTPError("https://upload/0.jpg", 429, "rate limited", {}, None),
+        pages=[page(1, "File:0.jpg", valid_imageinfo("https://upload/0.jpg"))],
+    )
+    acquire_commons(policy_path, output, first, sleeper=lambda _: None)
+
+    second = acquisition_opener(
+        Response(image_bytes()),
+        pages=[page(1, "File:0.jpg", valid_imageinfo("https://upload/0.jpg"))],
+    )
+    manifest = acquire_commons(
+        policy_path, output, second, sleeper=lambda _: None)
+
+    assert len(manifest["items"]) == 1
+    assert manifest["items"][0]["page_id"] == 1
+    assert manifest["items"][0]["status"] == "accepted"
+
+
+def test_acquire_stops_after_exhausted_http_429(tmp_path):
+    policy_path = write_policy(tmp_path / "policy.json", max_retries=0)
+    opener = acquisition_opener(
+        HTTPError("https://upload/0.jpg", 429, "rate limited", {}, None),
+        Response(image_bytes()),
+    )
+
+    manifest = acquire_commons(
+        policy_path, tmp_path / "out", opener, sleeper=lambda _: None)
+
+    assert len(manifest["items"]) == 1
+    assert manifest["items"][0]["reason"] == "http-error-429"
+    assert "https://upload/1.jpg" not in opener.urls
 
 
 def test_acquire_closes_both_image_http_errors_when_retry_is_exhausted(tmp_path):

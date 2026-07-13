@@ -22,5 +22,8 @@
     "CC BY-SA 3.0",
     "CC BY-SA 4.0"
   ],
-  "user_agent": "ObjectCount/0.1 (training data acquisition)"
+  "user_agent": "ObjectCount/0.1 (https://github.com/mmdal0857/ObjectCount; training data acquisition)",
+  "request_delay_seconds": 2.0,
+  "max_retries": 3,
+  "retry_backoff_seconds": [5.0, 15.0, 30.0]
 }

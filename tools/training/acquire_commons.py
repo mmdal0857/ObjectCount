@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import tempfile
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -28,6 +29,7 @@ class UrlResponse(Protocol):
 
 UrlOpener = Callable[[Request], UrlResponse]
 Clock = Callable[[], datetime]
+Sleeper = Callable[[float], None]
 
 
 class ManifestValidationError(ValueError):
@@ -56,12 +58,16 @@ class CommonsPolicy:
     accepted_mime_types: tuple[str, ...]
     accepted_licenses: tuple[str, ...]
     user_agent: str
+    request_delay_seconds: float
+    max_retries: int
+    retry_backoff_seconds: tuple[float, ...]
 
     @classmethod
     def from_json(cls, path: Path) -> "CommonsPolicy":
         payload = json.loads(Path(path).read_text(encoding="utf-8"))
         payload["accepted_mime_types"] = tuple(payload["accepted_mime_types"])
         payload["accepted_licenses"] = tuple(payload["accepted_licenses"])
+        payload["retry_backoff_seconds"] = tuple(payload["retry_backoff_seconds"])
         return cls(**payload)
 
 
@@ -73,15 +79,29 @@ def _metadata_value(metadata: dict, name: str) -> str | None:
     return value if isinstance(value, str) and value else None
 
 
-def _open_with_retry(request: Request, opener: UrlOpener) -> UrlResponse:
-    for attempt in range(2):
+def _open_with_retry(request: Request, opener: UrlOpener,
+                     policy: CommonsPolicy, sleeper: Sleeper) -> UrlResponse:
+    for attempt in range(policy.max_retries + 1):
+        sleeper(policy.request_delay_seconds)
         try:
             return opener(request)
         except HTTPError as error:
             _close_response(error)
-            if error.code != 503 or attempt == 1:
+            if error.code not in {429, 503} or attempt == policy.max_retries:
                 raise
+            sleeper(_retry_delay(error, policy, attempt))
     raise AssertionError("HTTP retry loop did not return or raise")
+
+
+def _retry_delay(error: HTTPError, policy: CommonsPolicy, attempt: int) -> float:
+    retry_after = error.headers.get("Retry-After") if error.headers else None
+    if retry_after is not None:
+        try:
+            return min(max(float(retry_after), 0.0), 120.0)
+        except ValueError:
+            pass
+    index = min(attempt, len(policy.retry_backoff_seconds) - 1)
+    return policy.retry_backoff_seconds[index]
 
 
 def _close_response(response: object) -> None:
@@ -90,8 +110,9 @@ def _close_response(response: object) -> None:
         close()
 
 
-def _open_json(request: Request, opener: UrlOpener) -> dict:
-    response = _open_with_retry(request, opener)
+def _open_json(request: Request, opener: UrlOpener, policy: CommonsPolicy,
+               sleeper: Sleeper) -> dict:
+    response = _open_with_retry(request, opener, policy, sleeper)
     try:
         return json.loads(response.read())
     finally:
@@ -99,7 +120,8 @@ def _open_json(request: Request, opener: UrlOpener) -> dict:
 
 
 def iter_category_files(
-        policy: CommonsPolicy, opener: UrlOpener) -> Iterator[dict]:
+        policy: CommonsPolicy, opener: UrlOpener,
+        sleeper: Sleeper = time.sleep) -> Iterator[dict]:
     continuation: str | None = None
     while True:
         parameters = {
@@ -120,7 +142,7 @@ def iter_category_files(
             f"{policy.api_url}?{urlencode(parameters)}",
             headers={"User-Agent": policy.user_agent},
         )
-        payload = _open_json(request, opener)
+        payload = _open_json(request, opener, policy, sleeper)
         pages = payload.get("query", {}).get("pages", [])
         if isinstance(pages, dict):
             pages = pages.values()
@@ -164,7 +186,7 @@ def iter_category_files(
 
 def acquire_commons(
         policy_path: Path, output: Path, opener: UrlOpener = urlopen,
-        *, clock: Clock = _utc_now) -> dict:
+        *, clock: Clock = _utc_now, sleeper: Sleeper = time.sleep) -> dict:
     policy = CommonsPolicy.from_json(policy_path)
     output = Path(output)
     images = output / "images"
@@ -182,7 +204,14 @@ def acquire_commons(
             "items": [],
         }
 
-    completed_page_ids = {item.get("page_id") for item in manifest["items"]}
+    completed_page_ids = {
+        item["page_id"] for item in manifest["items"]
+        if item.get("status") in {"accepted", "rejected"}
+    }
+    failed_indices = {
+        item["page_id"]: index for index, item in enumerate(manifest["items"])
+        if item.get("status") == "failed"
+    }
     known_hashes = {
         item["sha256"] for item in manifest["items"]
         if item.get("status") == "accepted"
@@ -191,7 +220,7 @@ def acquire_commons(
         item.get("status") == "accepted" for item in manifest["items"])
     _write_manifest(manifest_path, manifest)
 
-    for source in iter_category_files(policy, opener):
+    for source in iter_category_files(policy, opener, sleeper):
         if accepted_count >= policy.max_files:
             break
         if source["page_id"] in completed_page_ids:
@@ -202,12 +231,19 @@ def acquire_commons(
         if reason is not None:
             item.update(status="rejected", reason=reason)
         else:
-            _acquire_file(item, policy, images, known_hashes, opener)
+            _acquire_file(item, policy, images, known_hashes, opener, sleeper)
             if item["status"] == "accepted":
                 accepted_count += 1
-        manifest["items"].append(item)
-        completed_page_ids.add(item["page_id"])
+        failed_index = failed_indices.get(item["page_id"])
+        if failed_index is None:
+            manifest["items"].append(item)
+        else:
+            manifest["items"][failed_index] = item
+        if item["status"] in {"accepted", "rejected"}:
+            completed_page_ids.add(item["page_id"])
         _write_manifest(manifest_path, manifest)
+        if item.get("reason") == "http-error-429":
+            break
     return manifest
 
 
@@ -235,12 +271,13 @@ class _DownloadRejected(Exception):
 
 
 def _acquire_file(item: dict, policy: CommonsPolicy, images: Path,
-                  known_hashes: set[str], opener: UrlOpener) -> None:
+                  known_hashes: set[str], opener: UrlOpener,
+                  sleeper: Sleeper) -> None:
     temporary: Path | None = None
     response: UrlResponse | None = None
     try:
         request = Request(item["url"], headers={"User-Agent": policy.user_agent})
-        response = _open_with_retry(request, opener)
+        response = _open_with_retry(request, opener, policy, sleeper)
         content_length = response.headers.get("Content-Length")
         if content_length is not None and int(content_length) > policy.max_bytes:
             item.update(status="rejected", reason="content-length-exceeds-limit")
@@ -449,7 +486,7 @@ def _validate_accepted_item(item: dict, *, index: int, output: Path) -> None:
 
 
 def main(argv: list[str] | None = None, *, opener: UrlOpener = urlopen,
-         clock: Clock = _utc_now) -> int:
+         clock: Clock = _utc_now, sleeper: Sleeper = time.sleep) -> int:
     parser = argparse.ArgumentParser(
         description="Acquire and verify licensed Wikimedia Commons images.")
     parser.add_argument("--config", type=Path)
@@ -471,7 +508,7 @@ def main(argv: list[str] | None = None, *, opener: UrlOpener = urlopen,
 
     try:
         manifest = acquire_commons(
-            arguments.config, arguments.out, opener, clock=clock)
+            arguments.config, arguments.out, opener, clock=clock, sleeper=sleeper)
     except Exception as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
