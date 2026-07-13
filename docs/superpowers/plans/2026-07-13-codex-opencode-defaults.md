@@ -223,7 +223,9 @@ if (-not ($agent.permission | Where-Object { $_.permission -eq 'bash' -and $_.pa
 "resolved.model=$($resolved.model)"
 "agent.model=$($agent.model.providerID)/$($agent.model.modelID)"
 "agent.git_denials=$($denials -join ', ')"
-opencode agent list | Select-String -Pattern 'codex-worker'
+$agentListMatch = opencode agent list | Select-String -Pattern 'codex-worker'
+if (-not $agentListMatch) { throw 'codex-worker missing from agent list' }
+$agentListMatch
 ```
 
 Expected: exit code `0`; resolved agent is `codex-worker`, the global and worker models resolve to `lmstudio/google/gemma-4-12b`, all four destructive Git patterns are denied, commits require approval, and the agent appears in the list.
