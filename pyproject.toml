@@ -17,6 +17,7 @@ capture = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
 [project.scripts]
 objectcount-detect = "objectcount.cli.detect:main"
 objectcount-eval = "objectcount.cli.evaluate:main"
+objectcount-capture = "objectcount.cli.capture:main"
 
 [build-system]
 requires = ["setuptools>=68"]

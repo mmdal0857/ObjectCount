@@ -9,8 +9,9 @@
 - ADR: `docs/adr/` — 0001 무손실 store-and-forward, 0002 유선 우선 연결
 
 ## 명령어
-- 테스트: `.venv\Scripts\python -m pytest -q` (49개)
+- 테스트: `.venv\Scripts\python -m pytest -q` (76개)
 - 감지: `.venv\Scripts\objectcount-detect --package models/packages/coco-demo --input <이미지|폴더|영상> --out out/<이름>`
+- 캡처: `.venv\Scripts\objectcount-capture --package models/packages/coco-demo --out out/captures` — 폰 Chrome에서 `http://localhost:8377/phone`, PC 뷰어 `http://localhost:8377/`. 캡처 세션 폴더는 `--input`으로 그대로 리플레이 가능
 - 평가: `.venv\Scripts\objectcount-eval --package <pkg> --dataset <dir>` — **항상 exit 0** (하네스는 보고 도구, 오류도 stderr 보고 후 0)
 - COCO 데모 패키지 재생성: `.venv\Scripts\python tools\export_pretrained.py` (선행: `pip install -e ".[tools]"`)
 
