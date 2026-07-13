@@ -145,3 +145,20 @@ def test_rejects_exact_duplicate_images_across_splits(tmp_path):
             _splits(tmp_path / "splits.json", "test"),
             tmp_path / "dataset",
         )
+
+
+def test_preserves_standard_yolo_web_and_negative_splits(tmp_path):
+    web = tmp_path / "web"
+    _image(web / "images/val/roll.jpg", 30)
+    _label(web / "labels/val/roll.txt", "0 0.5 0.5 0.5 0.5\n")
+    phone = tmp_path / "phone"
+    negatives = tmp_path / "negatives"
+    _image(negatives / "images/test/cup.jpg", 160)
+    _label(negatives / "labels/test/cup.txt", "")
+
+    build_candidate_v2(
+        web, phone, negatives, _splits(tmp_path / "splits.json"), tmp_path / "dataset"
+    )
+
+    assert (tmp_path / "dataset/images/val/web_roll.jpg").is_file()
+    assert (tmp_path / "dataset/labels/test/negative_cup.txt").read_text() == ""

@@ -33,6 +33,20 @@ def _images(directory: Path) -> list[Path]:
     )
 
 
+def _split_images(root: Path) -> list[tuple[str, Path, Path]]:
+    image_root = root / "images"
+    label_root = root / "labels"
+    direct = [("train", image, label_root) for image in _images(image_root)]
+    split_samples = []
+    for split in SPLITS:
+        split_dir = image_root / split
+        if split_dir.is_dir():
+            split_samples.extend(
+                (split, image, label_root / split) for image in _images(split_dir)
+            )
+    return direct + split_samples
+
+
 def _normalized_positive(label: Path, kind: str) -> str:
     if not label.is_file():
         raise ValueError(f"missing {kind} label: {label}")
@@ -108,20 +122,20 @@ def _load_splits(path: Path) -> tuple[dict[str, dict[str, Any]], set[str]]:
 def _copy_web(
     root: Path, staging: Path, provenance: list[dict[str, Any]]
 ) -> int:
-    images = _images(root / "images")
-    for image in images:
-        label = root / "labels" / f"{image.stem}.txt"
+    samples = _split_images(root)
+    for split, image, label_dir in samples:
+        label = label_dir / f"{image.stem}.txt"
         _copy_sample(
             root,
             image,
             _normalized_positive(label, "web"),
             staging,
-            "train",
+            split,
             "web",
             "web",
             provenance,
         )
-    return len(images)
+    return len(samples)
 
 
 def _copy_phone(
@@ -165,9 +179,9 @@ def _copy_phone(
 def _copy_negatives(
     root: Path, staging: Path, provenance: list[dict[str, Any]]
 ) -> int:
-    images = _images(root / "images")
-    for image in images:
-        label = root / "labels" / f"{image.stem}.txt"
+    samples = _split_images(root)
+    for split, image, label_dir in samples:
+        label = label_dir / f"{image.stem}.txt"
         if not label.is_file():
             raise ValueError(f"missing negative label: {label}")
         if label.read_text(encoding="utf-8").strip():
@@ -177,12 +191,12 @@ def _copy_negatives(
             image,
             "",
             staging,
-            "train",
+            split,
             "negative",
             "negative",
             provenance,
         )
-    return len(images)
+    return len(samples)
 
 
 def _composition_warnings(
