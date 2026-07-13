@@ -5,8 +5,7 @@ import json
 from pathlib import Path
 from typing import Iterator
 
-import cv2
-
+from .image_io import read_image
 from .sources import FrameRecord
 
 MANIFEST_NAME = "manifest.jsonl"
@@ -56,7 +55,7 @@ def iter_spool(session_dir: str | Path) -> Iterator[FrameRecord]:
             if not line:
                 continue
             entry = json.loads(line)
-            image = cv2.imread(str(session_dir / entry["file"]))
+            image = read_image(session_dir / entry["file"])
             if image is None:  # 기록 중단·삭제 — 공백은 건너뛴다 (스펙 §4)
                 continue
             yield FrameRecord(source_id=session_dir.name,

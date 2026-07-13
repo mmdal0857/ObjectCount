@@ -34,6 +34,19 @@ def test_roundtrip_with_gap(tmp_path):
     assert info["device"] == "test"
 
 
+def test_replay_under_korean_directory(tmp_path):
+    session = tmp_path / "한글기기명"
+    writer = SpoolWriter(session)
+    writer.append(1, make_jpeg(10), server_ts=100.1)
+    writer.close()
+
+    records = list(iter_spool(session))
+
+    assert len(records) == 1
+    assert records[0].frame_index == 1
+    assert records[0].image.shape == (48, 64, 3)
+
+
 def test_iter_frames_dispatches_to_spool(tmp_path):
     session = tmp_path / "cap"
     writer = SpoolWriter(session)

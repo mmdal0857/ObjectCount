@@ -8,7 +8,10 @@ from objectcount.frames.sources import FrameRecord, iter_frames
 
 
 def write_image(path: Path, value: int) -> None:
-    cv2.imwrite(str(path), np.full((32, 32, 3), value, dtype=np.uint8))
+    ok, buf = cv2.imencode(
+        path.suffix, np.full((32, 32, 3), value, dtype=np.uint8))
+    assert ok
+    path.write_bytes(buf.tobytes())
 
 
 def test_single_image(tmp_path):
@@ -17,6 +20,18 @@ def test_single_image(tmp_path):
     assert len(records) == 1
     assert records[0].frame_index == 0
     assert records[0].source_id == "a.png"
+    assert records[0].image.shape == (32, 32, 3)
+
+
+def test_single_image_under_korean_directory(tmp_path):
+    image_dir = tmp_path / "한글기기명"
+    image_dir.mkdir()
+    image_path = image_dir / "frame.png"
+    write_image(image_path, 10)
+
+    records = list(iter_frames(image_path))
+
+    assert len(records) == 1
     assert records[0].image.shape == (32, 32, 3)
 
 

@@ -21,7 +21,7 @@
 - **카운팅 3원칙**(스펙 §1): 보수적(애매하면 적게 세고 의심 플래그) / 무손실(프레임 임의 폐기 금지) / 원본 불변(보정은 append-only)
 - 프레임 입력은 `iter_frames()`의 `Iterator[FrameRecord]` 시그니처로만 — 폰 스트림도 같은 자리에 꽂힌다
 - 개발 PC는 AMD GPU — 학습은 백엔드 인터페이스로 추상화(스펙 §4-③), GPU 추론은 `onnxruntime-directml` 교체로
-- **OpenCV 파일 IO는 Windows 한글 경로에서 무음 실패** — 쓰기는 `imencode`+`write_bytes`(detect.py 적용됨), 읽기는 `np.fromfile`+`imdecode`. 읽기 쪽(`sources.py`·`spool.py`의 `cv2.imread`)은 미수정 — 한글 기기명 세션 폴더 리플레이 시 무음 0프레임 위험
+- **OpenCV 파일 IO는 Windows 한글 경로에서 무음 실패** — 쓰기는 `imencode`+`write_bytes`(detect.py), 읽기는 `frames/image_io.py`의 `read_image()`(np.fromfile+imdecode, sources·spool 적용됨). 새 코드에서 `cv2.imread`/`cv2.imwrite` 직접 호출 금지
 
 ## 작업 구조
 - 메인 레포 `F:\Project\ObjectCount`(master) / `C:\Users\mmdal\orca\workspaces\ObjectCount\*`는 브랜치별 worktree — **워크트리마다 `.venv` 별도 생성 필요** (`py -m venv .venv` 후 `pip install -e ".[dev,capture]"`)
