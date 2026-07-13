@@ -49,8 +49,9 @@ def main(argv: list[str] | None = None) -> int:
         report = evaluate_dataset(Path(args.package), Path(args.dataset),
                                   conf=args.conf)
     except (ModelPackageError, ValueError, OSError) as error:
-        # 플랜 제약: 하네스는 보고 도구 — 오류도 보고하고 exit 0 유지
-        print(f"오류: {error}", file=sys.stderr)
+        # 하네스는 보고 도구 — 실행불가도 보고 후 exit 0.
+        # 단 '보고된 결과'(일치 m/n)와 구분되는 접두어를 쓴다 (리뷰 이월 항목)
+        print(f"실행불가: {error}", file=sys.stderr)
         return 0
 
     for name, row in sorted(report["per_image"].items()):

@@ -49,7 +49,9 @@ def test_missing_expected_counts_reports_error_exits_zero(tiny_package, tmp_path
     cv2.imwrite(str(dataset / "a.png"), np.zeros((64, 64, 3), dtype=np.uint8))
     exit_code = main(["--package", str(tiny_package), "--dataset", str(dataset)])
     assert exit_code == 0
-    assert "오류" in capsys.readouterr().err
+    captured = capsys.readouterr()
+    assert "실행불가" in captured.err  # 보고 결과와 구분 (리뷰 이월 항목)
+    assert "일치" not in captured.out
 
 
 def test_unlisted_images_are_skipped(tiny_package, tmp_path):
@@ -68,4 +70,4 @@ def test_corrupt_model_reports_error_exits_zero(tmp_path, capsys):
     dataset = make_dataset(tmp_path, {"a.png": 1})
     exit_code = main(["--package", str(package), "--dataset", str(dataset)])
     assert exit_code == 0
-    assert "오류" in capsys.readouterr().err
+    assert "실행불가" in capsys.readouterr().err
