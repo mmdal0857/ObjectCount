@@ -107,9 +107,11 @@ def main(argv: list[str] | None = None) -> int:
 
     app = create_app(out_dir=out_dir, detector=detector,
                      default_fps=args.fps, startup_warning=warning)
-    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
-    if stop_keeper is not None:
-        stop_keeper.set()
+    try:
+        uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
+    finally:
+        if stop_keeper is not None:
+            stop_keeper.set()
     return 0
 
 

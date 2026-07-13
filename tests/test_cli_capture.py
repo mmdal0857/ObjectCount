@@ -92,6 +92,21 @@ def test_adb_reverse_keeper_reasserts(monkeypatch):
     assert calls[0] == ["adb", "reverse", "tcp:8377", "tcp:8377"]
 
 
+def test_keeper_stopped_when_uvicorn_raises(tmp_path, monkeypatch):
+    """uvicorn 기동 실패(포트 충돌 등)에도 keeper는 정리돼야 한다 (리뷰 #5)."""
+    import uvicorn
+
+    def boom(app, **kw):
+        raise RuntimeError("포트 충돌")
+    monkeypatch.setattr(uvicorn, "run", boom)
+    stop = threading.Event()
+    monkeypatch.setattr(cli, "_start_reverse_keeper", lambda port: stop)
+
+    with pytest.raises(RuntimeError):
+        cli.main(["--out", str(tmp_path), "--no-detect"])
+    assert stop.is_set()
+
+
 def test_keeper_started_unless_no_adb(tmp_path, monkeypatch):
     import uvicorn
     monkeypatch.setattr(uvicorn, "run", lambda app, **kw: None)
