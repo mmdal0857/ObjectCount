@@ -308,12 +308,21 @@ Run:
 ```powershell
 $before = git status --porcelain=v1
 $output = opencode run --agent codex-worker --format default "Read AGENTS.md and its required context files. Do not edit anything. Report the current project phase using exactly the four required headings."
+$probeExit = $LASTEXITCODE
+Write-Output "probeExit=$probeExit"
+if ($probeExit -ne 0) { throw "OpenCode probe exited $probeExit" }
+$output
 foreach ($heading in @('## Summary', '## Changed files', '## Commands and verification', '## Risks or blockers')) {
   if (($output -join "`n") -notmatch [regex]::Escape($heading)) { throw "Missing heading: $heading" }
+  Write-Output "heading[$heading]=PASS"
 }
 $after = git status --porcelain=v1
-$output
+Write-Output 'beforeStatus:'
+if ($before) { $before } else { Write-Output '<clean>' }
+Write-Output 'afterStatus:'
+if ($after) { $after } else { Write-Output '<clean>' }
 if (($after -join "`n") -ne ($before -join "`n")) { throw 'Read-only probe changed the worktree' }
+Write-Output 'worktreeEquality=PASS'
 ```
 
 Expected: exit code `0`; output includes all four headings and the probe makes no worktree changes.
