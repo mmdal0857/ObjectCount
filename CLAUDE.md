@@ -12,7 +12,7 @@
 - 테스트: `.venv\Scripts\python -m pytest -q` (95개)
 - 감지: `.venv\Scripts\objectcount-detect --package models/packages/coco-demo --input <이미지|폴더|영상> --out out/<이름>`
 - 캡처: `.venv\Scripts\objectcount-capture --package models/packages/coco-demo --out out/captures` — 폰 Chrome에서 `http://localhost:8377/phone`, PC 뷰어 `http://localhost:8377/`. 캡처 세션 폴더는 `--input`으로 그대로 리플레이 가능
-- 평가: `.venv\Scripts\objectcount-eval --package <pkg> --dataset <dir>` — **항상 exit 0** (하네스는 보고 도구, 오류도 stderr 보고 후 0)
+- 평가: `.venv\Scripts\objectcount-eval --package <pkg> --dataset <dir>` — **항상 exit 0** (하네스는 보고 도구; 실행 실패는 stderr `실행불가:` 접두어로 보고 결과와 구분)
 - COCO 데모 패키지 재생성: `.venv\Scripts\python tools\export_pretrained.py` (선행: `pip install -e ".[tools]"`)
 
 ## 규칙
@@ -21,6 +21,11 @@
 - **카운팅 3원칙**(스펙 §1): 보수적(애매하면 적게 세고 의심 플래그) / 무손실(프레임 임의 폐기 금지) / 원본 불변(보정은 append-only)
 - 프레임 입력은 `iter_frames()`의 `Iterator[FrameRecord]` 시그니처로만 — 폰 스트림도 같은 자리에 꽂힌다
 - 개발 PC는 AMD GPU — 학습은 백엔드 인터페이스로 추상화(스펙 §4-③), GPU 추론은 `onnxruntime-directml` 교체로
+- **OpenCV 파일 IO는 Windows 한글 경로에서 무음 실패** — 쓰기는 `imencode`+`write_bytes`(detect.py 적용됨), 읽기는 `np.fromfile`+`imdecode`. 읽기 쪽(`sources.py`·`spool.py`의 `cv2.imread`)은 미수정 — 한글 기기명 세션 폴더 리플레이 시 무음 0프레임 위험
+
+## 작업 구조
+- 메인 레포 `F:\Project\ObjectCount`(master) / `C:\Users\mmdal\orca\workspaces\ObjectCount\*`는 브랜치별 worktree — **워크트리마다 `.venv` 별도 생성 필요** (`py -m venv .venv` 후 `pip install -e ".[dev,capture]"`)
+- Codex 코드 리뷰는 `coelacanth` 워크트리의 `docs/reviews/*-for-claude.md`로 전달됨
 
 ## Phase 1b 이월 항목 (최종 리뷰 follow-up)
 README, 테스트 MANIFEST 중복 정리
