@@ -40,6 +40,20 @@ def test_detect_cli_roi_filters_all(tiny_package, tmp_path):
     assert record["detections"] == []
 
 
+def test_detect_cli_korean_out_dir(tiny_package, tmp_path):
+    """한글 출력 경로 — cv2.imwrite 무음 실패 대신 정상 기록돼야 한다 (리뷰 이월 항목)."""
+    image_path = tmp_path / "frame.png"
+    cv2.imwrite(str(image_path), np.zeros((64, 64, 3), dtype=np.uint8))
+    out_dir = tmp_path / "한글출력"
+
+    exit_code = main(["--package", str(tiny_package),
+                      "--input", str(image_path),
+                      "--out", str(out_dir)])
+
+    assert exit_code == 0
+    assert (out_dir / "annotated" / "frame.png_0.jpg").is_file()
+
+
 def test_detect_cli_bad_package_returns_error(tmp_path, capsys):
     image_path = tmp_path / "frame.png"
     cv2.imwrite(str(image_path), np.zeros((64, 64, 3), dtype=np.uint8))

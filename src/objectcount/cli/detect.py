@@ -50,15 +50,21 @@ def main(argv: list[str] | None = None) -> int:
                     "detections": [asdict(d) for d in detections],
                 }, ensure_ascii=False) + "\n")
                 annotated = draw_detections(record.image, detections)
-                cv2.imwrite(str(annotated_dir /
-                                f"{record.source_id}_{record.frame_index}.jpg"),
-                            annotated)
+                # cv2.imwrite는 한글 경로에서 무음 실패 — imencode + write_bytes
+                ok, buf = cv2.imencode(".jpg", annotated)
+                if not ok:
+                    raise ValueError(
+                        f"주석 이미지 인코드 실패: {record.source_id} "
+                        f"프레임 {record.frame_index}")
+                (annotated_dir /
+                 f"{record.source_id}_{record.frame_index}.jpg"
+                 ).write_bytes(buf.tobytes())
                 total_frames += 1
                 total_detections += len(detections)
 
         print(f"{total_frames}프레임에서 {total_detections}건 감지 → {out_dir}")
         return 0
-    except (ModelPackageError, ValueError) as error:
+    except (ModelPackageError, ValueError, OSError) as error:
         print(f"오류: {error}", file=sys.stderr)
         return 1
 
