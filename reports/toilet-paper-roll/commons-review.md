@@ -27,4 +27,15 @@ Holder-mounted, damaged, partial, and multiple-roll scenes were retained when ea
 
 ## Current Gate
 
-Source acquisition and source-level review are complete. The 56 retained images are not yet training-ready because reviewed YOLO labels have not been produced. Empty labels are not permitted for these web-positive images.
+Source acquisition, source-level review, and annotation review are complete.
+
+- Proposal model: `yolov8s-worldv2.pt`, prompted with `toilet paper roll`
+- Proposal threshold: confidence `0.05`, IoU `0.50`
+- Proposed: 31 of 56 retained images
+- Annotation-approved: 10 images, 15 Product Instances
+- Annotation-rejected: 46 images
+- Reviewed dataset: `out/training/toilet-paper-roll-v2/web-reviewed/`
+
+All 56 retained candidates were inspected, including the 25 images with no proposal. Proposal boxes were accepted only when every visible Product Instance was covered and each box stayed tight to the physical roll body. Images were rejected when proposals were missing, duplicated, grouped, or included unrolled sheets, holders, toilets, artwork, or unrelated objects. Rejections from this gate are stored separately under `commons_exclude_annotation_images`; downloaded Commons originals remain unchanged.
+
+The approved labels contain exactly five YOLO fields with class `0` and normalized coordinates. No empty-label web positives remain in the reviewed dataset.
