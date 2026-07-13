@@ -9,7 +9,7 @@
 - ADR: `docs/adr/` — 0001 무손실 store-and-forward, 0002 유선 우선 연결
 
 ## 명령어
-- 테스트: `.venv\Scripts\python -m pytest -q` (76개)
+- 테스트: `.venv\Scripts\python -m pytest -q` (95개)
 - 감지: `.venv\Scripts\objectcount-detect --package models/packages/coco-demo --input <이미지|폴더|영상> --out out/<이름>`
 - 캡처: `.venv\Scripts\objectcount-capture --package models/packages/coco-demo --out out/captures` — 폰 Chrome에서 `http://localhost:8377/phone`, PC 뷰어 `http://localhost:8377/`. 캡처 세션 폴더는 `--input`으로 그대로 리플레이 가능
 - 평가: `.venv\Scripts\objectcount-eval --package <pkg> --dataset <dir>` — **항상 exit 0** (하네스는 보고 도구, 오류도 stderr 보고 후 0)
@@ -23,4 +23,5 @@
 - 개발 PC는 AMD GPU — 학습은 백엔드 인터페이스로 추상화(스펙 §4-③), GPU 추론은 `onnxruntime-directml` 교체로
 
 ## Phase 1b 이월 항목 (최종 리뷰 follow-up)
-FrameRecord `timestamp` 필드(추적용), zero-area 박스 필터, `cv2.imwrite` 반환 검사(한글 경로 무음 실패), ROI [0,1] 범위 검증, README, eval "보고됨 vs 실행불가" 구분, 테스트 MANIFEST 중복 정리
+README, 테스트 MANIFEST 중복 정리
+(완료: FrameRecord timestamp / zero-area 박스 필터 / cv2.imwrite 한글 경로 / ROI 범위 검증 / eval 실행불가 구분 — 2026-07-13 캡처 도구 세션에서 처리)
