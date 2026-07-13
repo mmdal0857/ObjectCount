@@ -9,6 +9,10 @@ class RoiPolygon:
         if len(points) < 3:
             raise ValueError("ROI 폴리곤은 꼭짓점이 3개 이상이어야 합니다")
         self.points = [(float(x), float(y)) for x, y in points]
+        for x, y in self.points:
+            if not (0.0 <= x <= 1.0 and 0.0 <= y <= 1.0):
+                raise ValueError(
+                    f"ROI 꼭짓점은 [0,1] 정규화 좌표여야 합니다: ({x}, {y})")
 
     def contains(self, x: float, y: float) -> bool:
         """ray casting — 점이 폴리곤 내부에 있는지."""

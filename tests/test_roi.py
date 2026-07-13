@@ -31,3 +31,11 @@ def test_parse_roi_string():
     roi = parse_roi("0.5,0.5;1,0.5;1,1;0.5,1")
     assert roi.contains(0.75, 0.75)
     assert not roi.contains(0.1, 0.1)
+
+
+def test_polygon_rejects_out_of_range_points():
+    # Detection 좌표는 [0,1] 정규화 — ROI도 같은 좌표계여야 한다 (리뷰 이월 항목)
+    with pytest.raises(ValueError, match=r"\[0,1\]"):
+        RoiPolygon([(0, 0), (2, 0), (1, 1)])
+    with pytest.raises(ValueError, match=r"\[0,1\]"):
+        parse_roi("0,0;1,0;-0.1,1")
