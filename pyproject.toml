@@ -10,8 +10,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "onnx>=1.16"]
+dev = ["pytest>=8", "onnx>=1.16", "httpx>=0.27"]
 tools = ["ultralytics>=8.2"]
+capture = ["fastapi>=0.110", "uvicorn[standard]>=0.29"]
 
 [project.scripts]
 objectcount-detect = "objectcount.cli.detect:main"
