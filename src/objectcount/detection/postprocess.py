@@ -34,15 +34,14 @@ def decode_yolo(
         confs[keep], class_ids[keep],
     ):
         # letterbox 픽셀 → 원본 픽셀 → [0,1] 정규화
-        x1 = (cx - w / 2 - meta.pad_x) / meta.scale / meta.src_width
-        y1 = (cy - h / 2 - meta.pad_y) / meta.scale / meta.src_height
-        x2 = (cx + w / 2 - meta.pad_x) / meta.scale / meta.src_width
-        y2 = (cy + h / 2 - meta.pad_y) / meta.scale / meta.src_height
+        x1 = float(np.clip((cx - w / 2 - meta.pad_x) / meta.scale / meta.src_width, 0.0, 1.0))
+        y1 = float(np.clip((cy - h / 2 - meta.pad_y) / meta.scale / meta.src_height, 0.0, 1.0))
+        x2 = float(np.clip((cx + w / 2 - meta.pad_x) / meta.scale / meta.src_width, 0.0, 1.0))
+        y2 = float(np.clip((cy + h / 2 - meta.pad_y) / meta.scale / meta.src_height, 0.0, 1.0))
+        if x2 <= x1 or y2 <= y1:
+            continue  # 클리핑 후 면적 0 — 프레임 밖 박스는 버린다
         detections.append(Detection(
-            x1=float(np.clip(x1, 0.0, 1.0)),
-            y1=float(np.clip(y1, 0.0, 1.0)),
-            x2=float(np.clip(x2, 0.0, 1.0)),
-            y2=float(np.clip(y2, 0.0, 1.0)),
+            x1=x1, y1=y1, x2=x2, y2=y2,
             score=float(conf),
             class_id=int(cid),
             class_name=class_names[int(cid)],

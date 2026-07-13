@@ -78,6 +78,12 @@ def test_nms_keeps_disjoint_boxes():
     assert len(kept) == 2
 
 
+def test_decode_drops_zero_area_after_clip():
+    # 프레임 완전 밖 박스 — 클리핑 후 폭이 0이 되면 버려야 한다 (리뷰 이월 항목)
+    raw = make_raw([[100, 32, 10, 10, 0.9, 0.0]])
+    assert decode_yolo(raw, META, CLASSES) == []
+
+
 def test_decode_rejects_class_count_mismatch():
     raw = make_raw([[32, 32, 16, 16, 0.9, 0.1]])  # nc=2
     with pytest.raises(ValueError, match="클래스 수"):
