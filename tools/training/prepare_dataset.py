@@ -146,7 +146,6 @@ def prepare_dataset(source_zip: Path, negative_zip: Path, config_path: Path,
         _copy_positives(positive_root, staging, config)
         _copy_negatives(negative_root, staging, config)
         (staging / "data.yaml").write_text(json.dumps({
-            "path": str(output.resolve()),
             "train": "images/train",
             "val": "images/val",
             "test": "images/test",

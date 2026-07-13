@@ -73,8 +73,9 @@ def test_prepare_dataset_remaps_positives_and_imports_cup_backgrounds(tmp_path):
     assert len(cup_labels) == 1
     assert cup_labels[0].read_text(encoding="utf-8") == ""
     assert not list((out / "images").rglob("negative_dog.jpg"))
-    assert json.loads((out / "data.yaml").read_text(encoding="utf-8"))[
-        "names"] == ["toilet_paper_roll"]
+    data_config = json.loads((out / "data.yaml").read_text(encoding="utf-8"))
+    assert data_config["names"] == ["toilet_paper_roll"]
+    assert "path" not in data_config
     assert (out / "dataset-report.json").is_file()
 
 
