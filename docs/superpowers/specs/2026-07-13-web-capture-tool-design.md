@@ -47,7 +47,7 @@ adb로 연결된 안드로이드 폰의 카메라를 **웹 페이지(브라우�
 | 파일 | 역할 |
 |---|---|
 | `server.py` | FastAPI 앱 — `/phone` 캡처 페이지, `/` 뷰어 페이지, `/ws/ingest`, `/ws/view` |
-| `spool.py` | `SpoolWriter`(JPEG+manifest 기록), `SpoolSource`(캡처 세션 → `FrameRecord` 이터레이터) |
+| `../frames/spool.py` | `SpoolWriter`(JPEG+manifest 기록), `iter_spool`(캡처 세션 → `FrameRecord` 이터레이터) — capture extra 없이 리플레이 가능하도록 코어에 둔다 |
 | `live.py` | 감지 워커 — 크기 1 mailbox(최신 교체), `OnnxDetector` → `viz` 오버레이 → 뷰어 푸시 |
 | `static/phone.html` | 캡처 페이지 (바닐라 JS, 빌드 스텝 없음) |
 | `static/viewer.html` | 뷰어 페이지 (바닐라 JS) |

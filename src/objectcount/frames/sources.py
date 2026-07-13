@@ -23,7 +23,11 @@ class FrameRecord:
 def iter_frames(path: str | Path) -> Iterator[FrameRecord]:
     path = Path(path)
     if path.is_dir():
-        yield from _iter_folder(path)
+        if (path / "manifest.jsonl").exists():
+            from .spool import iter_spool  # 순환 import 방지 지연 로드
+            yield from iter_spool(path)
+        else:
+            yield from _iter_folder(path)
     elif path.suffix.lower() in IMAGE_EXTS:
         yield _read_image(path, frame_index=0)
     elif path.suffix.lower() in VIDEO_EXTS:
