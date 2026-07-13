@@ -9,6 +9,7 @@ import tempfile
 from datetime import date
 from pathlib import Path
 from typing import Any, Callable
+from uuid import uuid4
 
 from objectcount.models.package import load_package
 
@@ -35,9 +36,8 @@ def _default_trainer_factory(model: str | Path) -> Any:
 
 
 def _replace_directory(staging: Path, destination: Path) -> None:
-    backup = destination.parent / f".{destination.name}.backup"
-    if backup.exists():
-        shutil.rmtree(backup)
+    backup = destination.parent / (
+        f".{destination.name}.backup-{uuid4().hex}")
     if destination.exists():
         os.replace(destination, backup)
     try:

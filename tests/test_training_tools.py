@@ -1,4 +1,5 @@
 import json
+import os
 import zipfile
 from pathlib import Path
 from types import SimpleNamespace
@@ -163,6 +164,35 @@ def test_train_candidate_keeps_existing_package_when_export_fails(tmp_path):
 
     assert marker.read_text(encoding="utf-8") == "old"
     assert not list(tmp_path.glob(".package.tmp-*"))
+
+
+def test_train_candidate_restores_existing_package_when_install_fails(
+        tmp_path, monkeypatch):
+    output = tmp_path / "package"
+    output.mkdir()
+    marker = output / "keep.txt"
+    marker.write_text("old", encoding="utf-8")
+    real_replace = os.replace
+
+    def fail_staging_install(source, destination):
+        source = Path(source)
+        if source.name.startswith(".package.tmp-"):
+            raise OSError("install failed")
+        return real_replace(source, destination)
+
+    monkeypatch.setattr(
+        "tools.training.train_candidate.os.replace", fail_staging_install)
+
+    with pytest.raises(OSError, match="install failed"):
+        train_candidate(
+            write_train_config(tmp_path / "train.yaml"),
+            tmp_path / "data.yaml",
+            output,
+            trainer_factory=FakeTrainer,
+        )
+
+    assert marker.read_text(encoding="utf-8") == "old"
+    assert not list(tmp_path.glob(".package.backup-*"))
 
 
 def test_evaluate_thresholds_selects_zero_false_positive_threshold(tmp_path):
