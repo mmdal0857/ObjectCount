@@ -10,6 +10,7 @@ import pytest
 
 from tools.training.prepare_dataset import prepare_dataset
 from objectcount.detection.types import Detection
+from tools.training.create_contact_sheet import create_contact_sheet
 from tools.training.evaluate_candidate import evaluate_thresholds
 from tools.training.train_candidate import train_candidate
 
@@ -45,7 +46,10 @@ def write_config(path: Path) -> Path:
 def test_prepare_dataset_remaps_positives_and_imports_cup_backgrounds(tmp_path):
     positive_zip = write_zip(tmp_path / "positive.zip", {
         "train/images/roll.jpg": jpeg_bytes(20),
-        "train/labels/roll.txt": "1 0.5 0.5 0.4 0.4\n0 0.2 0.2 0.1 0.1\n",
+        "train/labels/roll.txt": (
+            "1 0.5 0.5 0.4 0.4\n"
+            "0 0.1 0.1 0.3 0.1 0.3 0.3 0.1 0.3\n"
+        ),
         "valid/images/roll_val.jpg": jpeg_bytes(80),
         "valid/labels/roll_val.txt": "1 0.5 0.5 0.5 0.5\n",
         "test/images/roll_test.jpg": jpeg_bytes(140),
@@ -86,6 +90,81 @@ def test_prepare_dataset_rejects_archive_path_traversal(tmp_path):
             write_config(tmp_path / "source.json"), tmp_path / "dataset")
 
     assert not (tmp_path / "outside.jpg").exists()
+
+
+def test_prepare_dataset_applies_source_image_exclusions(tmp_path):
+    positive_zip = write_zip(tmp_path / "positive.zip", {
+        "train/images/keep.jpg": jpeg_bytes(20),
+        "train/labels/keep.txt": "1 0.5 0.5 0.4 0.4\n",
+        "train/images/exclude.jpg": jpeg_bytes(40),
+        "train/labels/exclude.txt": "1 0.5 0.5 0.4 0.4\n",
+        "valid/images/val.jpg": jpeg_bytes(80),
+        "valid/labels/val.txt": "1 0.5 0.5 0.4 0.4\n",
+        "test/images/test.jpg": jpeg_bytes(120),
+        "test/labels/test.txt": "1 0.5 0.5 0.4 0.4\n",
+    })
+    negative_zip = write_zip(tmp_path / "negative.zip", {
+        "coco128/images/train2017/.keep": "",
+        "coco128/labels/train2017/.keep": "",
+    })
+    config_path = write_config(tmp_path / "source.json")
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    config["corrections_file"] = "corrections.json"
+    config_path.write_text(json.dumps(config), encoding="utf-8")
+    (tmp_path / "corrections.json").write_text(json.dumps({
+        "exclude_source_images": ["train/images/exclude.jpg"],
+    }), encoding="utf-8")
+
+    prepare_dataset(
+        positive_zip, negative_zip, config_path, tmp_path / "dataset")
+
+    assert (tmp_path / "dataset/images/train/keep.jpg").is_file()
+    assert not (tmp_path / "dataset/images/train/exclude.jpg").exists()
+
+
+def test_create_contact_sheet_records_seeded_positive_and_background_samples(
+        tmp_path):
+    dataset = tmp_path / "dataset"
+    for split in ("train", "val", "test"):
+        (dataset / "images" / split).mkdir(parents=True)
+        (dataset / "labels" / split).mkdir(parents=True)
+    cv2.imwrite(str(dataset / "images/train/positive.jpg"),
+                np.full((32, 48, 3), 80, dtype=np.uint8))
+    (dataset / "labels/train/positive.txt").write_text(
+        "0 0.5 0.5 0.5 0.5\n", encoding="utf-8")
+    cv2.imwrite(str(dataset / "images/val/background.jpg"),
+                np.full((32, 48, 3), 160, dtype=np.uint8))
+    (dataset / "labels/val/background.txt").write_text("", encoding="utf-8")
+    output = tmp_path / "contact-sheet.jpg"
+
+    selection = create_contact_sheet(
+        dataset, output, positive_count=1, background_count=1, seed=713)
+
+    assert output.is_file()
+    assert selection["positive_count"] == 1
+    assert selection["background_count"] == 1
+    assert (tmp_path / "contact-sheet-selection.json").is_file()
+
+
+def test_create_contact_sheet_applies_sample_offsets(tmp_path):
+    dataset = tmp_path / "dataset"
+    for split in ("train", "val", "test"):
+        (dataset / "images" / split).mkdir(parents=True)
+        (dataset / "labels" / split).mkdir(parents=True)
+    for index in range(3):
+        image = dataset / f"images/train/positive-{index}.jpg"
+        cv2.imwrite(str(image), np.full((16, 16, 3), index, dtype=np.uint8))
+        (dataset / f"labels/train/positive-{index}.txt").write_text(
+            "0 0.5 0.5 0.5 0.5\n", encoding="utf-8")
+
+    first = create_contact_sheet(
+        dataset, tmp_path / "first.jpg", positive_count=1, seed=713)
+    second = create_contact_sheet(
+        dataset, tmp_path / "second.jpg", positive_count=1,
+        positive_offset=1, seed=713)
+
+    assert first["samples"][0] != second["samples"][0]
+    assert second["positive_offset"] == 1
 
 
 class FakeTrainer:

@@ -47,6 +47,8 @@ def _prepare_layout(root: Path) -> None:
 
 def _copy_positives(extracted: Path, output: Path, config: dict) -> None:
     positive = config["positive"]
+    excluded = set(config.get("corrections", {}).get(
+        "exclude_source_images", []))
     accepted_ids = set(positive["class_ids"].values())
     if len(accepted_ids) != 1:
         raise ValueError("exactly one positive source class is required")
@@ -57,16 +59,28 @@ def _copy_positives(extracted: Path, output: Path, config: dict) -> None:
         label_dir = _find_directory(extracted, (source_split, "labels"))
         for image_path in sorted(path for path in image_dir.iterdir()
                                  if path.is_file()):
+            source_image = PurePosixPath(
+                source_split, "images", image_path.name).as_posix()
+            if source_image in excluded:
+                continue
             label_path = label_dir / f"{image_path.stem}.txt"
             if not label_path.is_file():
                 raise ValueError(f"missing source label: {label_path}")
             normalized: list[str] = []
             for line in label_path.read_text(encoding="utf-8").splitlines():
                 parts = line.split()
+                if not parts:
+                    continue
+                try:
+                    source_class_id = int(parts[0])
+                except ValueError as error:
+                    raise ValueError(
+                        f"invalid source class id: {label_path}") from error
+                if source_class_id != accepted_id:
+                    continue
                 if len(parts) != 5:
                     raise ValueError(f"invalid source label: {label_path}")
-                if int(parts[0]) == accepted_id:
-                    normalized.append("0 " + " ".join(parts[1:]))
+                normalized.append("0 " + " ".join(parts[1:]))
             shutil.copy2(image_path, output / "images" / target_split / image_path.name)
             text = "\n".join(normalized)
             if text:
@@ -103,7 +117,20 @@ def prepare_dataset(source_zip: Path, negative_zip: Path, config_path: Path,
     source_zip = Path(source_zip)
     negative_zip = Path(negative_zip)
     output = Path(output)
-    config = json.loads(Path(config_path).read_text(encoding="utf-8"))
+    config_path = Path(config_path)
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    corrections_file = config.get("corrections_file")
+    if corrections_file is not None:
+        corrections_path = PurePosixPath(str(corrections_file).replace("\\", "/"))
+        if corrections_path.is_absolute() or ".." in corrections_path.parts:
+            raise ValueError("corrections_file must be a safe relative path")
+        config["corrections"] = json.loads(
+            (config_path.parent / Path(*corrections_path.parts)).read_text(
+                encoding="utf-8"))
+        exclusions = config["corrections"].get("exclude_source_images", [])
+        if (not isinstance(exclusions, list)
+                or not all(isinstance(item, str) for item in exclusions)):
+            raise ValueError("exclude_source_images must be a string list")
     output.parent.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(dir=output.parent) as temporary:

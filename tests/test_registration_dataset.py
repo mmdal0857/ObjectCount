@@ -91,6 +91,8 @@ def test_duplicate_image_across_splits_is_error(tmp_path):
 
     assert report.exact_duplicates
     assert any("duplicate" in error for error in report.errors)
+    assert all(not Path(path).is_absolute()
+               for pair in report.exact_duplicates for path in pair)
 
 
 def test_near_duplicate_across_splits_is_warning(tmp_path):

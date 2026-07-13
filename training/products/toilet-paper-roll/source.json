@@ -4,6 +4,7 @@
   "candidate_status": "candidate",
   "retrieval_date": "2026-07-13",
   "seed": 713,
+  "corrections_file": "corrections.json",
   "positive": {
     "provider": "Roboflow Universe",
     "project": "testroboflow-mzzw9/toilet-paper-detection-pdgv2",

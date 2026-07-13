@@ -116,7 +116,10 @@ def validate_yolo_dataset(root: Path, class_count: int = 1) -> DatasetReport:
         for right in fingerprints[index + 1:]:
             if left[0] == right[0]:
                 continue
-            pair = (str(left[1]), str(right[1]))
+            pair = (
+                left[1].relative_to(root).as_posix(),
+                right[1].relative_to(root).as_posix(),
+            )
             if left[2] == right[2]:
                 report.exact_duplicates.append(pair)
                 report.errors.append(
