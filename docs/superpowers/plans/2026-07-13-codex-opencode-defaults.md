@@ -211,13 +211,22 @@ Run:
 $resolved = opencode debug config | ConvertFrom-Json -Depth 100
 if ($resolved.default_agent -ne 'codex-worker') { throw 'default_agent mismatch' }
 if ($resolved.model -ne 'lmstudio/google/gemma-4-12b') { throw 'model changed unexpectedly' }
-$agentText = opencode debug agent codex-worker
-if ($agentText -notmatch 'lmstudio/google/gemma-4-12b') { throw 'worker model missing' }
-if ($agentText -notmatch 'git push') { throw 'push denial missing' }
+$agent = opencode debug agent codex-worker | ConvertFrom-Json -Depth 100
+if ($agent.model.providerID -ne 'lmstudio') { throw 'worker provider missing' }
+if ($agent.model.modelID -ne 'google/gemma-4-12b') { throw 'worker model missing' }
+$denials = @($agent.permission | Where-Object { $_.permission -eq 'bash' -and $_.action -eq 'deny' } | ForEach-Object pattern)
+foreach ($pattern in @('git push*','git reset --hard*','git clean*','git branch -D*')) {
+  if ($pattern -notin $denials) { throw "denial missing: $pattern" }
+}
+if (-not ($agent.permission | Where-Object { $_.permission -eq 'bash' -and $_.pattern -eq 'git commit*' -and $_.action -eq 'ask' })) { throw 'commit ask missing' }
+"resolved.default_agent=$($resolved.default_agent)"
+"resolved.model=$($resolved.model)"
+"agent.model=$($agent.model.providerID)/$($agent.model.modelID)"
+"agent.git_denials=$($denials -join ', ')"
 opencode agent list | Select-String -Pattern 'codex-worker'
 ```
 
-Expected: exit code `0`; resolved agent is `codex-worker`, model is unchanged, and the agent appears in the list with its Git restrictions.
+Expected: exit code `0`; resolved agent is `codex-worker`, the global and worker models resolve to `lmstudio/google/gemma-4-12b`, all four destructive Git patterns are denied, commits require approval, and the agent appears in the list.
 
 Do not make a Git commit: these are user-global personal settings outside the repository.
 
