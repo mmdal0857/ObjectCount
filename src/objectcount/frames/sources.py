@@ -17,6 +17,7 @@ class FrameRecord:
     source_id: str
     frame_index: int
     image: np.ndarray
+    timestamp: float | None = None  # 초 단위, 소스 내 단조 증가 (스펙 §5)
 
 
 def iter_frames(path: str | Path) -> Iterator[FrameRecord]:
@@ -50,13 +51,15 @@ def _iter_video(path: Path) -> Iterator[FrameRecord]:
     if not capture.isOpened():
         raise ValueError(f"영상을 열 수 없습니다: {path}")
     try:
+        fps = capture.get(cv2.CAP_PROP_FPS)
         index = 0
         while True:
             ok, image = capture.read()
             if not ok:
                 break
             yield FrameRecord(source_id=path.name, frame_index=index,
-                              image=image)
+                              image=image,
+                              timestamp=index / fps if fps > 0 else None)
             index += 1
     finally:
         capture.release()

@@ -49,3 +49,23 @@ def test_unsupported_path_raises(tmp_path):
     target.write_text("x")
     with pytest.raises(ValueError):
         list(iter_frames(target))
+
+
+def test_image_timestamp_is_none(tmp_path):
+    write_image(tmp_path / "a.png", 10)
+    records = list(iter_frames(tmp_path / "a.png"))
+    assert records[0].timestamp is None
+
+
+def test_video_timestamp_from_fps(tmp_path):
+    video_path = tmp_path / "clip.avi"
+    writer = cv2.VideoWriter(str(video_path),
+                             cv2.VideoWriter_fourcc(*"MJPG"),
+                             5.0, (32, 32))
+    for i in range(5):
+        writer.write(np.full((32, 32, 3), i * 40, dtype=np.uint8))
+    writer.release()
+
+    records = list(iter_frames(video_path))
+    assert records[0].timestamp == pytest.approx(0.0)
+    assert records[3].timestamp == pytest.approx(3 / 5.0)
