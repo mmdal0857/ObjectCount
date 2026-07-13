@@ -77,3 +77,17 @@ def test_empty_classes_raises(tmp_path):
     manifest = dict(VALID, classes=[])
     with pytest.raises(ModelPackageError, match="classes"):
         load_package(write_package(tmp_path, manifest))
+
+
+@pytest.mark.parametrize("bad", [[], ["0"], [0, 99], "0", [True], [-1]])
+def test_invalid_active_class_ids_raises(tmp_path, bad):
+    manifest = dict(VALID, active_class_ids=bad)
+    with pytest.raises(ModelPackageError, match="active_class_ids"):
+        load_package(write_package(tmp_path, manifest))
+
+
+@pytest.mark.parametrize("bad", [0, -0.5, "0.02", True])
+def test_invalid_area_prior_raises(tmp_path, bad):
+    manifest = dict(VALID, area_prior=bad)
+    with pytest.raises(ModelPackageError, match="area_prior"):
+        load_package(write_package(tmp_path, manifest))

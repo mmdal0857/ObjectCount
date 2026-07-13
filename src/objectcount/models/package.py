@@ -63,6 +63,25 @@ def load_package(path: str | Path) -> ModelPackage:
         raise ModelPackageError(
             f"classes는 비어있지 않은 문자열 목록이어야 합니다: {classes!r}")
 
+    # Validate optional active_class_ids: non-empty int list within classes range
+    active_class_ids = manifest.get("active_class_ids")
+    if active_class_ids is not None:
+        valid = (isinstance(active_class_ids, list) and active_class_ids
+                 and all(isinstance(i, int) and not isinstance(i, bool)
+                         and 0 <= i < len(classes) for i in active_class_ids))
+        if not valid:
+            raise ModelPackageError(
+                f"active_class_ids는 0..{len(classes) - 1} 범위의 "
+                f"비어있지 않은 정수 목록이어야 합니다: {active_class_ids!r}")
+
+    # Validate optional area_prior: positive number
+    area_prior = manifest.get("area_prior")
+    if area_prior is not None:
+        if (not isinstance(area_prior, (int, float))
+                or isinstance(area_prior, bool) or area_prior <= 0):
+            raise ModelPackageError(
+                f"area_prior는 양수여야 합니다: {area_prior!r}")
+
     package = ModelPackage(
         root=root,
         product_id=manifest["product_id"],
@@ -70,8 +89,8 @@ def load_package(path: str | Path) -> ModelPackage:
         model_version=manifest["model_version"],
         input_size=tuple(manifest["input_size"]),
         classes=list(manifest["classes"]),
-        active_class_ids=manifest.get("active_class_ids"),
-        area_prior=manifest.get("area_prior"),
+        active_class_ids=active_class_ids,
+        area_prior=area_prior,
     )
     if not package.model_path.is_file():
         raise ModelPackageError(f"model.onnx가 없습니다: {package.model_path}")
