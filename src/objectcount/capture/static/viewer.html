@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>ObjectCount 뷰어</title>
+<style>
+  body { font-family: sans-serif; margin: 0; background: #111; color: #eee; }
+  #bar { display: flex; gap: 16px; padding: 8px; background: #222;
+         font-size: 14px; flex-wrap: wrap; }
+  #banner { background: #a33; padding: 6px; display: none; }
+  img { width: 100%; max-height: calc(100vh - 60px);
+        object-fit: contain; background: #000; }
+</style>
+</head>
+<body>
+<div id="bar">
+  <span id="recv">수신 —</span><span id="det">감지 —</span>
+  <span id="gaps">공백 —</span><span id="frames">프레임 —</span>
+  <span id="session">세션 —</span>
+</div>
+<div id="banner"></div>
+<img id="frame" alt="라이브 프레임">
+<script>
+function unpackFrame(buf) {
+  const view = new DataView(buf);
+  const len = view.getUint32(0);
+  const header = JSON.parse(
+    new TextDecoder().decode(new Uint8Array(buf, 4, len)));
+  return { header, payload: new Uint8Array(buf, 4 + len) };
+}
+let url = null;
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws/view`);
+  ws.binaryType = 'arraybuffer';
+  ws.onmessage = ev => {
+    const { header, payload } = unpackFrame(ev.data);
+    document.getElementById('recv').textContent =
+      `수신 ${header.recv_fps.toFixed(1)}fps`;
+    document.getElementById('det').textContent =
+      `감지 ${header.detect_fps.toFixed(1)}fps`;
+    document.getElementById('gaps').textContent = `공백 ${header.gaps}`;
+    document.getElementById('frames').textContent = `프레임 ${header.frames}`;
+    document.getElementById('session').textContent =
+      `세션 ${header.session || '—'}`;
+    const banner = document.getElementById('banner');
+    banner.style.display = header.warning ? 'block' : 'none';
+    banner.textContent = header.warning || '';
+    if (url) URL.revokeObjectURL(url);
+    url = URL.createObjectURL(new Blob([payload], { type: 'image/jpeg' }));
+    document.getElementById('frame').src = url;
+  };
+  ws.onclose = () => setTimeout(connect, 1000);
+}
+connect();
+</script>
+</body>
+</html>
