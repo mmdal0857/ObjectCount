@@ -15,7 +15,11 @@ FRAMES_DIR = "frames"
 
 
 class SpoolWriter:
-    """수신 프레임 내구 기록. append가 반환된 뒤에만 ack를 보낼 것 (무손실 원칙)."""
+    """수신 프레임 기록. append가 반환된 뒤에만 ack를 보낼 것.
+
+    보장 수준: JPEG 기록 + manifest flush — 프로세스 크래시 수준.
+    전원 장애까지 막는 fsync 내구성은 비목표 (스펙 §3).
+    """
 
     def __init__(self, session_dir: str | Path) -> None:
         self.session_dir = Path(session_dir)
