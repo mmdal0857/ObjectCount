@@ -1,10 +1,12 @@
 """캡처 서버 — 폰 프레임 수신. 스풀 기록 후에만 ack (무손실 원칙, 스펙 §3·§7)."""
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 import time
 from collections import deque
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -13,6 +15,7 @@ from fastapi import FastAPI, WebSocket
 from fastapi.responses import FileResponse, JSONResponse
 
 from ..frames.spool import SpoolWriter
+from .live import LatestFrameMailbox, ViewerHub, live_worker
 from .protocol import unpack_frame
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -101,9 +104,20 @@ def _handle_frame(state: CaptureState, data: bytes) -> int:
 
 def create_app(out_dir: str | Path, detector=None, default_fps: int = 5,
                startup_warning: str | None = None) -> FastAPI:
-    app = FastAPI()
     state = CaptureState(out_dir=Path(out_dir), default_fps=default_fps,
                          warning=startup_warning)
+    mailbox = LatestFrameMailbox()
+    hub = ViewerHub()
+    state.on_frame = mailbox.put
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        worker = asyncio.create_task(
+            live_worker(mailbox, hub, detector, state))
+        yield
+        worker.cancel()
+
+    app = FastAPI(lifespan=lifespan)
     app.state.capture = state
     app.state.detector = detector
 
@@ -149,5 +163,17 @@ def create_app(out_dir: str | Path, detector=None, default_fps: int = 5,
     @app.get("/")
     async def viewer_page() -> FileResponse:
         return FileResponse(STATIC_DIR / "viewer.html")
+
+    @app.websocket("/ws/view")
+    async def view(ws: WebSocket) -> None:
+        await ws.accept()
+        hub.add(ws)
+        try:
+            while True:
+                message = await ws.receive()
+                if message["type"] == "websocket.disconnect":
+                    break
+        finally:
+            hub.remove(ws)
 
     return app
