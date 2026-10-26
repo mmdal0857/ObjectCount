@@ -8,6 +8,8 @@ from typing import Iterator
 import cv2
 import numpy as np
 
+from .image_io import read_image
+
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 VIDEO_EXTS = {".mp4", ".avi", ".mkv", ".mov"}
 
@@ -37,7 +39,7 @@ def iter_frames(path: str | Path) -> Iterator[FrameRecord]:
 
 
 def _read_image(path: Path, frame_index: int) -> FrameRecord:
-    image = cv2.imread(str(path))
+    image = read_image(path)
     if image is None:
         raise ValueError(f"이미지를 읽을 수 없습니다: {path}")
     return FrameRecord(source_id=path.name, frame_index=frame_index, image=image)
