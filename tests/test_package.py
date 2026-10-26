@@ -33,10 +33,26 @@ def test_load_valid_package(tmp_path):
 
 
 def test_optional_fields_pass_through(tmp_path):
-    manifest = dict(VALID, active_class_ids=[0], area_prior=0.02)
+    manifest = dict(
+        VALID,
+        active_class_ids=[0],
+        area_prior=0.02,
+        candidate_status="candidate",
+        default_confidence=0.4,
+    )
     pkg = load_package(write_package(tmp_path, manifest))
     assert pkg.active_class_ids == [0]
     assert pkg.area_prior == 0.02
+    assert pkg.candidate_status == "candidate"
+    assert pkg.default_confidence == 0.4
+
+
+@pytest.mark.parametrize("value", [-0.01, 1.01, True, "0.4"])
+def test_invalid_default_confidence_raises(tmp_path, value):
+    manifest = dict(VALID, default_confidence=value)
+
+    with pytest.raises(ModelPackageError, match="default_confidence"):
+        load_package(write_package(tmp_path, manifest))
 
 
 def test_missing_required_field_raises(tmp_path):

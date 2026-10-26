@@ -1,0 +1,12 @@
+model: yolo11n.pt
+imgsz: 640
+epochs: 60
+patience: 15
+batch: 8
+workers: 4
+seed: 713
+deterministic: true
+amp: false
+device: 0
+project: out/training/toilet-paper-roll/runs
+name: candidate-v1

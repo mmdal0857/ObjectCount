@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "sessions": {
+    "20260713-103448-Mozilla-5-0-Linux-Androi": {
+      "split": "test",
+      "source": "F:/Project/ObjectCount/out/captures/20260713-103448-Mozilla-5-0-Linux-Androi"
+    },
+    "20260713-163302-Mozilla-5-0-Linux-Androi": {
+      "split": "test",
+      "source": "F:/Project/ObjectCount/out/live-candidate/20260713-163302-Mozilla-5-0-Linux-Androi"
+    }
+  },
+  "frozen_test_sessions": [
+    "20260713-103448-Mozilla-5-0-Linux-Androi",
+    "20260713-163302-Mozilla-5-0-Linux-Androi"
+  ]
+}

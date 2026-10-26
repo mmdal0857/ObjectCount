@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "product_id": "toilet-paper-roll",
+  "candidate_status": "candidate",
+  "retrieval_date": "2026-07-13",
+  "seed": 713,
+  "corrections_file": "corrections.json",
+  "positive": {
+    "provider": "Roboflow Universe",
+    "project": "testroboflow-mzzw9/toilet-paper-detection-pdgv2",
+    "version": 3,
+    "landing_page": "https://universe.roboflow.com/testroboflow-mzzw9/toilet-paper-detection-pdgv2",
+    "author": "TestRoboflow",
+    "license": "CC BY 4.0",
+    "license_url": "https://creativecommons.org/licenses/by/4.0/",
+    "expected_images": 126,
+    "expected_splits": {
+      "train": 96,
+      "val": 21,
+      "test": 9
+    },
+    "expected_classes": [
+      "basket",
+      "toilet-paper"
+    ],
+    "class_ids": {
+      "toilet_paper_roll": 1
+    },
+    "split_names": {
+      "train": "train",
+      "valid": "val",
+      "test": "test"
+    },
+    "attribution": "toilet paper detection Dataset by TestRoboflow, licensed under CC BY 4.0"
+  },
+  "negative": {
+    "provider": "Ultralytics COCO128",
+    "landing_page": "https://docs.ultralytics.com/datasets/detect/coco128/",
+    "archive_url": "https://github.com/ultralytics/assets/releases/download/v0.0.0/coco128.zip",
+    "archive_sha256": "61e5e3028863d8ffc3b81d6a514603954889f0edd5e4b44c4ce60b2da99aeb8e",
+    "image_license": "COCO source-image licenses; preserve original attribution metadata",
+    "license_url": "https://cocodataset.org/#termsofuse",
+    "required_class_ids": [
+      41
+    ],
+    "required_classes": [
+      "cup"
+    ]
+  },
+  "environment_evidence": {
+    "verified_at": "2026-07-13",
+    "distro": "Ubuntu-22.04 (WSL2)",
+    "python": "3.10.12",
+    "torch": "2.10.0+rocm7.2.0.gitb6ee5fde",
+    "torchvision": "0.25.0+rocm7.2.0.git82df5f59",
+    "hip": "7.2.26015",
+    "device": "AMD Radeon RX 9070 XT",
+    "autograd_steps": 20,
+    "autograd_gate": "pass",
+    "ultralytics": "8.3.169",
+    "ultralytics_smoke": "coco8, 1 epoch, imgsz 320, batch 2, device 0, amp false: pass",
+    "amp": "disabled after Ultralytics AMP anomaly gate on this ROCm stack"
+  }
+}

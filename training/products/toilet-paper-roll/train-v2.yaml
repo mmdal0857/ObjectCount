@@ -1,0 +1,18 @@
+{
+  "model": "yolo11n.pt",
+  "imgsz": 640,
+  "epochs": 100,
+  "patience": 25,
+  "batch": 8,
+  "workers": 4,
+  "seed": 713,
+  "deterministic": true,
+  "device": 0,
+  "amp": false,
+  "degrees": 20,
+  "perspective": 0.0005,
+  "hsv_v": 0.35,
+  "scale": 0.5,
+  "project": "out/training/toilet-paper-roll-v2/runs",
+  "name": "candidate-v2"
+}
